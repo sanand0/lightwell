@@ -1,0 +1,6 @@
+body { width: 332px; }
+main { padding: 14px; }
+h1 { font: 27px/1 var(--serif); margin: 0 0 12px; }
+p { margin: 7px 0; overflow-wrap: anywhere; }
+#origin { font: 11px/1.5 var(--mono); color: var(--accent); }
+#state { color: var(--muted); min-height: 43px; }

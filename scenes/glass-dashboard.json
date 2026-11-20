@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "name": "Glass Dashboard",
+  "layers": [
+    {
+      "id": "c2d7e14a-9a13-464e-8d60-3b52a81a03bd",
+      "name": "Orbital field",
+      "type": "generated",
+      "visible": true,
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "source": {
+        "style": "orbit"
+      }
+    },
+    {
+      "id": "2bf6ef3c-9d38-4c55-880d-523ae54cc426",
+      "name": "Camera",
+      "type": "camera",
+      "visible": true,
+      "x": 64,
+      "y": 106,
+      "w": 795,
+      "h": 510,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "rounded",
+      "blend": "source-over",
+      "source": {
+        "effect": "original",
+        "mirror": false,
+        "flip": false,
+        "brightness": 100,
+        "contrast": 100,
+        "saturation": 100,
+        "grayscale": 0
+      }
+    },
+    {
+      "id": "ef5d2e7c-f1e0-41a1-964d-8132d32d60bf",
+      "name": "Live signal card",
+      "type": "html",
+      "visible": true,
+      "x": 760,
+      "y": 185,
+      "w": 455,
+      "h": 325,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "source": {
+        "template": "metric",
+        "title": "Signal strength",
+        "markup": "",
+        "active": false,
+        "frozen": false,
+        "crop": 0
+      }
+    },
+    {
+      "id": "2508f83d-be4f-4470-b1b9-749ce44d339d",
+      "name": "Stage ink",
+      "type": "ink",
+      "visible": true,
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "source": {
+        "strokes": []
+      }
+    }
+  ]
+}

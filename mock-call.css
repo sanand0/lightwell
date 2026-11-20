@@ -1,0 +1,7 @@
+main { padding: 26px clamp(15px, 4vw, 55px); max-width: 950px; margin: auto; }
+h1 { font: normal 40px var(--serif); margin: 0; }
+p, figcaption { color: var(--muted); }
+figure { margin: 15px 0; }
+video { display: block; background: #151425; width: 100%; aspect-ratio: 16/9; border: 1px solid var(--rule); border-radius: 10px; }
+figcaption { font: 11px/1.5 var(--mono); padding-top: 6px; }
+pre { white-space: pre-wrap; font: 12px/1.6 var(--mono); }

@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "name": "Portal",
+  "layers": [
+    {
+      "id": "c2a04a7c-4e0e-46f4-a657-4d13b424ffc2",
+      "name": "Orbital field",
+      "type": "generated",
+      "visible": true,
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "source": {
+        "style": "orbit"
+      }
+    },
+    {
+      "id": "b232e880-608e-4c80-82d0-9decd78ed74c",
+      "name": "Revealed backdrop",
+      "type": "gradient",
+      "visible": true,
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "revealBy": "4c46cfc9-f5ce-43a2-a989-84009b18b447",
+      "source": {
+        "color": "#3b094a",
+        "color2": "#b63d3f"
+      }
+    },
+    {
+      "id": "b7288ae9-3685-4978-ba3a-a7fc88788416",
+      "name": "Camera",
+      "type": "camera",
+      "visible": true,
+      "x": 850,
+      "y": 460,
+      "w": 388,
+      "h": 220,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "rounded",
+      "blend": "source-over",
+      "source": {
+        "effect": "original",
+        "mirror": false,
+        "flip": false,
+        "brightness": 100,
+        "contrast": 100,
+        "saturation": 100,
+        "grayscale": 0
+      }
+    },
+    {
+      "id": "4c46cfc9-f5ce-43a2-a989-84009b18b447",
+      "name": "Portal panels",
+      "type": "html",
+      "visible": true,
+      "x": 75,
+      "y": 132,
+      "w": 690,
+      "h": 435,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "source": {
+        "template": "portal",
+        "title": "Two sides of the signal",
+        "markup": "",
+        "active": false,
+        "frozen": false,
+        "crop": 0
+      }
+    },
+    {
+      "id": "c609f47c-1170-4a52-8acd-1032119a9d82",
+      "name": "Stage ink",
+      "type": "ink",
+      "visible": true,
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 720,
+      "rotation": 0,
+      "opacity": 1,
+      "fit": "cover",
+      "clip": "none",
+      "blend": "source-over",
+      "source": {
+        "strokes": []
+      }
+    }
+  ]
+}

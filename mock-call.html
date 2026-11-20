@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lightwell · Mock Call</title>
+  <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="mock-call.css">
+  <script src="mock-call.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Mock call</h1>
+    <p>This page requests its own camera and microphone through the browser. Enable Lightwell on this origin, reload, then start the call.</p>
+    <div class="inline">
+      <button id="join" class="primary" type="button">Start video and mic</button>
+      <button id="audio" type="button">Start mic only</button>
+      <button id="leave" type="button" disabled>Leave</button>
+    </div>
+    <figure>
+      <video id="remote-view" autoplay playsinline muted aria-label="Decoded remote video"></video>
+      <figcaption>Remote preview from a local WebRTC peer · unmirrored</figcaption>
+    </figure>
+    <pre id="stream-info" role="status">Waiting to join</pre>
+  </main>
+</body>
+</html>

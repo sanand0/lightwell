@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lightwell · Camera Studio</title>
+  <link rel="stylesheet" href="studio.css">
+  <script defer src="scene.js"></script>
+  <script defer src="html-sources.js"></script>
+  <script defer src="compositor.js"></script>
+  <script type="module" src="studio.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span class="mark" aria-hidden="true">◈</span><span>Lightwell <small>Camera Studio</small></span></div>
+    <div class="mast-actions">
+      <button id="stop-captures" type="button" title="Stop background camera and display captures" hidden>Stop captures</button>
+      <button id="theme" type="button" title="Toggle light and dark theme">Theme</button>
+      <button id="open-bridge" type="button" title="Configure camera substitution for a website">Call bridge</button>
+    </div>
+  </header>
+  <main class="workspace">
+    <section class="stage-panel" aria-label="Stage and production controls">
+      <div class="stage-header">
+        <div class="scene-controls inline">
+          <label class="preset-label">Scene <select id="preset" aria-label="Load saved scene"></select></label>
+          <button id="new-scene" type="button">New</button>
+          <button id="save-scene" type="button">Save</button>
+        </div>
+        <div class="inline">
+          <button id="live-mode" type="button" aria-label="Live" aria-pressed="false" title="Send Studio edits to enabled call tabs as you make them" disabled>Live</button>
+          <button id="export-png" type="button" title="Export the stage as PNG">PNG</button>
+          <button id="record" type="button" title="Record up to 8 seconds of video">Record</button>
+          <button id="compare" type="button" aria-pressed="false" title="Compare the current stage with an original-camera reference">Compare</button>
+        </div>
+      </div>
+      <div id="stage-area" class="stage-area">
+        <div id="stage-wrap" class="stage-wrap">
+          <canvas id="stage" width="1280" height="720" aria-label="Composited stage preview"></canvas>
+          <div id="director" class="director" tabindex="0" aria-label="Stage editing surface">
+            <i class="snap-guide snap-x" aria-hidden="true" hidden></i>
+            <i class="snap-guide snap-y" aria-hidden="true" hidden></i>
+            <div id="selection" hidden>
+              <span id="selection-name"></span>
+              <i data-corner="nw"></i><i data-corner="ne"></i><i data-corner="sw"></i><i data-corner="se"></i>
+            </div>
+          </div>
+        </div>
+        <figure class="reference" id="comparison" hidden>
+          <canvas id="reference" width="640" height="360" aria-label="Original camera reference"></canvas>
+          <figcaption>Original camera reference</figcaption>
+        </figure>
+      </div>
+      <div class="stage-meta"><span><b id="live-indicator" aria-hidden="true"></b><span id="stage-state">Stage preview</span></span><span id="frame-info">1280 × 720</span></div>
+      <div class="toolbar" aria-label="Stage tools">
+        <div class="tool-group" aria-label="Interaction mode">
+          <button type="button" data-tool="select" aria-pressed="true" title="Select or move a layer (V)">Select</button>
+          <button type="button" data-tool="pen" aria-pressed="false" title="Draw on the stage (P)">Pen</button>
+          <button type="button" data-tool="highlighter" aria-pressed="false" title="Draw translucent ink (H)">Highlight</button>
+          <button type="button" data-tool="eraser" aria-pressed="false" title="Erase only the current ink layer (E)">Eraser</button>
+          <button id="undo" type="button" title="Undo a stroke or clear (Ctrl+Z)">Undo</button>
+          <button id="clear" type="button" title="Clear the selected drawing layer">Clear</button>
+          <button type="button" data-tool="interact" aria-pressed="false" title="Use the live HTML controls directly (I)">HTML</button>
+        </div>
+        <div class="tool-group">
+          <input type="color" id="ink-color" value="#e4ff95" aria-label="Stroke color">
+          <label class="weight">Thickness <input type="range" id="ink-width" min="1" max="55" value="8"></label>
+        </div>
+      </div>
+      <div class="source-bar">
+        <span id="notice" role="status" aria-live="polite"></span>
+      </div>
+      <details class="diagnostics">
+        <summary>Diagnostics</summary>
+        <dl id="diagnostic-values"></dl>
+      </details>
+    </section>
+    <aside class="sidebar" aria-label="Scene controls">
+      <section class="layers-panel" aria-labelledby="layers-title">
+        <div class="panel-heading"><h1 id="layers-title">Layers</h1><button type="button" id="add-layer" popovertarget="layer-menu">+ Add</button></div>
+        <div id="layer-menu" popover><div id="layer-types"></div></div>
+        <ol id="layers"></ol>
+      </section>
+      <section class="inspector" aria-labelledby="inspector-title">
+        <div class="panel-heading"><h2 id="inspector-title">Inspector</h2><button type="button" id="reset">Reset</button></div>
+        <fieldset id="transform-controls">
+          <label class="checkbox aspect-lock"><input data-property="lockAspect" type="checkbox" checked> Lock native aspect ratio</label>
+          <details id="transform-panel" class="inspector-details">
+            <summary>Transform</summary>
+            <div class="grid">
+              <label>X <input data-property="x" type="number" step="1"></label>
+              <label>Y <input data-property="y" type="number" step="1"></label>
+              <label>Width <input data-property="w" type="number" min="16" step="1"></label>
+              <label>Height <input data-property="h" type="number" min="16" step="1"></label>
+              <label>Rotation <output data-value="rotation"></output><input data-property="rotation" type="range" min="-180" max="180" step="1"></label>
+              <label>Opacity <output data-value="opacity"></output><input data-property="opacity" type="range" min="0" max="1" step=".01"></label>
+              <label>Fit <select data-property="fit"></select></label>
+              <label>Clip <select data-property="clip"></select></label>
+              <label>Blend <select data-property="blend"></select></label>
+            </div>
+          </details>
+          <details id="crop-panel" class="inspector-details">
+            <summary>Crop</summary>
+            <div class="grid crop-grid">
+              <label>Left <output data-value="left"></output><input data-crop="left" type="range" min="0" max="95"></label>
+              <label>Right <output data-value="right"></output><input data-crop="right" type="range" min="0" max="95"></label>
+              <label>Top <output data-value="top"></output><input data-crop="top" type="range" min="0" max="95"></label>
+              <label>Bottom <output data-value="bottom"></output><input data-crop="bottom" type="range" min="0" max="95"></label>
+            </div>
+            <button id="reset-crop" type="button">Reset crop</button>
+          </details>
+        </fieldset>
+        <fieldset id="source-controls"><legend>Source</legend><div id="source-fields"></div></fieldset>
+      </section>
+      <div class="file-actions">
+        <button id="save-json" type="button">Save JSON</button>
+        <button id="open-json" type="button">Load JSON</button>
+        <input id="json-file" type="file" accept=".json,application/json" hidden>
+        <button id="publish" type="button" class="primary" disabled>Use in calls</button>
+      </div>
+    </aside>
+  </main>
+  <footer class="keyboard">V select · P pen · H highlight · E erase · I interact with HTML · Drag to snap · Hold Shift for free placement · Arrow keys move layer</footer>
+  <dialog id="scene-dialog">
+    <form id="scene-form">
+      <h2>Save scene</h2>
+      <label>Scene name <input id="scene-name" required maxlength="80" autofocus></label>
+      <div class="inline"><button type="button" id="cancel-save">Cancel</button><button class="primary">Save scene</button></div>
+    </form>
+  </dialog>
+  <dialog id="rename-dialog">
+    <form id="rename-form" method="dialog">
+      <h2>Rename layer</h2>
+      <label>Layer name <input id="layer-rename" maxlength="80" autofocus required></label>
+      <button>Done</button>
+    </form>
+  </dialog>
+  <dialog id="bridge-dialog">
+    <form method="dialog">
+      <h2>Call bridge</h2>
+      <p>Open the target site and click the Lightwell extension icon. Enable the bridge for that origin, then reload the page and start its camera. Use <b>Use in calls</b> to send the scene from Studio.</p>
+      <p>The call uses the website’s camera and microphone. Selected files are copied into the published scene. Camera and display captures continue in the background until stopped.</p>
+      <div class="inline"><a href="http://localhost:8765/mock-call.html" target="_blank" rel="noreferrer">Open local mock call</a><button autofocus>Close</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

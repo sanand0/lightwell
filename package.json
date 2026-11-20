@@ -1,0 +1,14 @@
+{
+  "name": "lightwell",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/scene.test.js",
+    "test:browser": "node test/browser.js",
+    "dev": "node dev.js",
+    "test:display": "node test/display.js"
+  },
+  "devDependencies": {
+    "playwright": "1.57.0"
+  }
+}
