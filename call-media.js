@@ -34,7 +34,7 @@
         request, error: "Timed out waiting for " + (kind === "mask" ? "segmentation" : "the published source"),
       }), 3800);
       slot.busy = true;
-      slot.nextAt = now + (kind === "mask" ? 88 : 68);
+      slot.nextAt = now + (kind === "mask" || kind === "hands" ? 88 : 68);
       this.pending.set(request, { slot, kind, timeout });
       try { send({ session: this.id, request, kind, layer, frame, publication: this.publication?.id ?? null }, frame ? [frame] : []); }
       catch (error) {
@@ -55,6 +55,11 @@
         slot.error = packet.error;
         slot.nextAt = performance.now() + 550;
       } else slot.error = "";
+      if (kind === "hands") {
+        this.handList = packet.error ? [] : packet.hands || [];
+        this.handStatus = packet.error || packet.state || "";
+        return;
+      }
       if (slot !== this.maskRequest && kind === "mask") { packet.frame?.close(); return; }
       if (packet.frame || packet.error) {
         slot.frame?.close();
@@ -101,6 +106,21 @@
       this.request(slot, "mask", null, this.input.transferToImageBitmap());
     }
 
+    // Hand gestures run in the offscreen page; results arrive in handList (see hands.js for the shape).
+    trackHands(source) {
+      const slot = this.handRequest ??= {};
+      if (slot.busy || performance.now() < (slot.nextAt || 0)) return;
+      const width = source.videoWidth ?? source.width;
+      const height = source.videoHeight ?? source.height;
+      const factor = Math.min(1, 320 / Math.max(width, height));
+      const w = Math.max(1, Math.round(width * factor));
+      const h = Math.max(1, Math.round(height * factor));
+      this.handInput ??= new OffscreenCanvas(w, h);
+      if (this.handInput.width !== w || this.handInput.height !== h) { this.handInput.width = w; this.handInput.height = h; }
+      this.handInput.getContext("2d").drawImage(source, 0, 0, w, h);
+      this.request(slot, "hands", null, this.handInput.transferToImageBitmap());
+    }
+
     reset() {
       this.mask?.close();
       this.mask = null;
@@ -109,6 +129,8 @@
     }
 
     close() {
+      this.handRequest = {};
+      this.handList = [];
       if (this.next) send({ session: this.id, kind: "release" });
       for (const job of this.pending.values()) clearTimeout(job.timeout);
       this.pending.clear();

@@ -155,6 +155,10 @@ dialog h2 { margin: 3px 0; font: 26px var(--serif); }
 .layer-menu button { display: block; width: 100%; text-align: left; }
 .inspector-details { border-top: 1px solid var(--rule); padding-block: 6px; }
 .inspector-details summary { color: var(--muted); cursor: pointer; }
+.fx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fx-amount { grid-column: 1 / -1; }
+.fx-hands { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+.fx-hint { margin: 4px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; text-wrap: pretty; }
 .inspector-details output { float: right; font: 10px var(--mono); color: var(--accent); }
 #transform-controls .aspect-lock { flex-direction: row; align-items: center; margin-bottom: 6px; }
 .crop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: 6px; }

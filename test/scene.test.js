@@ -99,10 +99,41 @@ test("snapping a locked resize preserves the opposite corner and aspect ratio", 
 test("experimental effects normalize to known kinds and survive call publishing", () => {
   const { layer, normalize, callScene } = globalThis.Lightwell;
   const scene = normalize({ version: 1, layers: [
-    layer("html", { fx: { look: "knit", move: "silk", exit: "lava", amount: 4, gone: true, at: -5 } }),
+    layer("html", { fx: { fill: "camera", look: "knit", move: "silk", exit: "lava", amount: 4, gone: true, at: -5, ix: 2 } }),
     layer("camera"),
-  ] });
-  assert.deepEqual(scene.layers[0].fx, { look: "knit", move: "silk", exit: "none", amount: 1, gone: true, at: 0 });
+  ], hands: true, pokes: [{ x: 5, y: 6, at: 9, kind: "tap" }, { x: 1, at: "x" }] });
+  assert.deepEqual(scene.layers[0].fx, { fill: "camera", look: "knit", move: "silk", exit: "none", amount: 1, gone: true, at: 0, ix: 1, iy: .45 });
+  assert.deepEqual([scene.hands, scene.pokes], [true, [{ x: 5, y: 6, at: 9, kind: "tap" }]]);
+  assert.equal("hands" in normalize({ version: 1, layers: [] }), false);
   assert.equal("fx" in scene.layers[1], false);
   assert.deepEqual(callScene(scene).layers[0].fx, scene.layers[0].fx);
+});
+
+test("hand gestures pinch-drag a layer and a held fist plays its exit locally", async () => {
+  await import("../touch.js");
+  await import("../effects.js");
+  const { Touch, layer, normalize } = globalThis.Lightwell;
+  const scene = normalize({ version: 1, layers: [
+    layer("camera"),
+    layer("markdown", { id: "card", x: 800, y: 300, w: 200, h: 100, fx: { exit: "shatter" } }),
+  ] });
+  const touch = new Touch();
+  const map = (u, v) => ({ x: u * 1280, y: v * 720 });
+  const hand = (x, y, gesture = "None", pinch = false) => {
+    const points = Array.from({ length: 21 }, () => [x, y]);
+    points[0] = [x, y + .2]; points[9] = [x, y]; points[8] = [x, y - .05]; points[4] = pinch ? [x + .005, y - .05] : [x - .1, y];
+    return [{ points, gesture, score: .9 }];
+  };
+  touch.hands(hand(900 / 1280, 380 / 720, "None", true), scene, map);
+  touch.hands(hand(500 / 1280, 380 / 720, "None", true), scene, map);
+  const moved = touch.apply(scene.layers[1]);
+  assert.ok(Math.abs(moved.x - 400) < 1 && moved.y === 300, JSON.stringify(moved));
+  touch.hands(hand(500 / 1280, 380 / 720), scene, map);
+  assert.equal(touch.grab, null);
+  for (let i = 0; i < 4; i++) touch.hands(hand(480 / 1280, 350 / 720, "Closed_Fist"), scene, map);
+  const played = touch.apply(scene.layers[1]).fx;
+  assert.equal(played.gone, true);
+  assert.ok(played.ix > 0 && played.ix < 1);
+  assert.equal(touch.local(scene, scene.layers[1]).at(-1).kind, "finger");
+  assert.equal(scene.layers[1].fx.gone, false, "gestures never edit the published scene");
 });

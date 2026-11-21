@@ -4,7 +4,7 @@
   const W = 1280;
   const H = 720;
   // Classic scripts injected into call tabs, in load order. Studio and the worker share this list.
-  const callScripts = ["scene.js", "html-sources.js", "effects.js", "compositor.js", "call-media.js", "call-main.js"];
+  const callScripts = ["scene.js", "html-sources.js", "gl.js", "touch.js", "effects.js", "compositor.js", "call-media.js", "call-main.js"];
   const types = ["camera", "media", "html", "markdown", "display", "ink"];
   const legacy = ["solid", "gradient", "generated", "text", "image", "video"];
   const mediaTypes = ["media", "image", "video"];
@@ -14,8 +14,14 @@
   const clips = ["none", "rounded", "ellipse"];
   const blends = ["source-over", "multiply", "screen", "overlay", "lighter", "difference"];
   const effects = ["original", "os", "blur", "cutout"];
-  // Experimental layer effects (see effects.js): a material look, an ambient motion and a triggered exit.
-  const fxKinds = { look: ["none", "knit", "halftone", "tube"], move: ["none", "silk", "jelly", "melt", "rays"], exit: ["none", "shatter", "swarm", "burn", "vortex"] };
+  // Experimental layer effects (see effects.js): a fill, a material look, an ambient motion and a triggered exit.
+  // fill: what paints the layer's shape. Rain, pool, water, lens and smudge use WebGL (gl.js).
+  const fxKinds = {
+    fill: ["own", "camera", "glass", "echo", "prism"],
+    look: ["none", "knit", "halftone", "tube", "neon", "rain", "pool"],
+    move: ["none", "silk", "jelly", "melt", "rays", "water", "lens", "smudge"],
+    exit: ["none", "shatter", "swarm", "burn", "vortex"],
+  };
   const cameraFrames = {
     Corner: { x: 850, y: 460, w: 388, h: 220, clip: "rounded" },
     Side: { x: 720, y: 0, w: 560, h: 720, clip: "none" },
@@ -67,13 +73,19 @@
         ...(item.fx && { fx: normalizeFx(item.fx) }),
       };
     });
-    return { version: 1, name: str(scene.name, "Untitled scene", 80), layers };
+    // pokes: recent Studio touches (stage units, Date.now() ms) that effects react to in calls too.
+    const pokes = Array.isArray(scene.pokes) ? scene.pokes.slice(-16).filter(poke => Number.isFinite(poke?.at)).map(poke => ({
+      x: n(poke.x, 0, -W, W * 2), y: n(poke.y, 0, -H, H * 2), at: n(poke.at, 0, 0, 1e14), kind: oneOf(poke.kind, ["tap", "drag"]),
+    })) : [];
+    return { version: 1, name: str(scene.name, "Untitled scene", 80), layers, ...(scene.hands === true && { hands: true }), ...(pokes.length && { pokes }) };
   }
 
   function normalizeFx(fx) {
     return {
       ...Object.fromEntries(Object.entries(fxKinds).map(([key, kinds]) => [key, oneOf(fx[key], kinds)])),
       amount: n(fx.amount, .5, 0, 1), gone: fx.gone === true, at: n(fx.at, 0, 0, 1e14),
+      // Where an exit starts (shatter's impact), as a fraction of the layer box.
+      ix: n(fx.ix, .5, 0, 1), iy: n(fx.iy, .45, 0, 1),
     };
   }
 

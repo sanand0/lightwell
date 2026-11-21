@@ -28,6 +28,10 @@ A few points:
 
 Commit into a new branch as you go. Commit what you have so far (including prompts.md) and commit when you're done.
 
+--- <!-- steering -->
+
+I'd rather large downloads were optional and on-demand, e.g. if I'm on a slow network.
+
 ## Polish, 20 Nov 2026
 
 <!--

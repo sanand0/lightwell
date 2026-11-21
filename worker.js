@@ -108,8 +108,10 @@ async function mediaRequest(port, info, message) {
     if (!/^[0-9a-f-]{36}$/.test(id) || ports.get(port) !== info) return;
     if (kind === "release") { releaseMedia(info, id); return; }
     if (!Number.isSafeInteger(request) || !info.enabled || publication !== (info.publication?.id ?? null)) return;
-    const item = kind === "mask" ? null : info.scene?.layers.find(item => item.id === layer && item.visible && item.opacity > 0);
-    if (kind === "mask") {
+    const item = kind === "mask" || kind === "hands" ? null : info.scene?.layers.find(item => item.id === layer && item.visible && item.opacity > 0);
+    if (kind === "hands") {
+      if (info.scene?.hands !== true || !(frame instanceof ImageBitmap) || !frame.width || !frame.height || frame.width > 320 || frame.height > 320) return;
+    } else if (kind === "mask") {
       const maskAllowed = info.scene?.layers.some(item => item.type === "camera" && item.visible && item.opacity > 0 && ["os", "blur", "cutout"].includes(item.source.effect));
       if (!maskAllowed || !(frame instanceof ImageBitmap) || !frame.width || !frame.height || frame.width > 256 || frame.height > 256) return;
     } else if (kind === "asset") {
@@ -120,7 +122,7 @@ async function mediaRequest(port, info, message) {
     if (!info.media.has(id) && info.media.size < 8) info.media.set(id, { key: crypto.randomUUID(), slots: new Map() });
     const session = info.media.get(id);
     if (!session) return;
-    const slotKey = kind === "mask" ? kind : layer;
+    const slotKey = kind === "mask" || kind === "hands" ? kind : layer;
     const prior = session.slots.get(slotKey);
     if (prior?.busy || performance.now() - (prior?.at ?? -Infinity) < 54) {
       port.postMessage({ media: { session: id, request, skipped: true } });

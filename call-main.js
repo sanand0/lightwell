@@ -245,6 +245,7 @@
       const media = new lab.CallMedia();
       media.configure(publication);
       compositor.segmenter = media;
+      compositor.hands = media;
       compositor.remoteMedia = item => media.media(item);
       compositor.resizeToCamera = true;
       compositor.setCamera(video);

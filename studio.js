@@ -1,5 +1,6 @@
 // @ts-check
 import { createSegmenter } from "./segmentation.js";
+import { createHands, fakeHands, loadModel, modelCached } from "./hands.js";
 import { CaptureClient } from "./capture-client.js";
 import { readAssets, writeAssets, removeOldAssets, savedScenes, saveSceneRecord } from "./publication.js";
 
@@ -76,7 +77,7 @@ function editHTML(id, key) {
 const renderer = new Compositor(stage, scene, { action: editHTML, fallback: demo.has("no-html") });
 const segmenterForCamera = () => createSegmenter(demo.has("seg-fail"), demo.get("delegate") === "gpu" ? "GPU" : "CPU");
 const diagnostics = new Map();
-for (const key of ["Browser", "HTML-in-Canvas", "Camera permission", "Camera source", "OS background blur", "Segmentation", "Output", "Capture", "Display sources", "Last error"]) {
+for (const key of ["Browser", "HTML-in-Canvas", "Camera permission", "Camera source", "OS background blur", "Segmentation", "Output", "Capture", "Display sources", "Hands", "Last error"]) {
   const value = make("dd");
   diagnostics.set(key, value);
   $("#diagnostic-values").append(make("dt", key), value);
@@ -107,6 +108,7 @@ function status() {
     stage.width + " × " + stage.height + " · " + stats.fps.toFixed(1) + " fps · " + stats.ms.toFixed(1) + " ms render",
     (stage.captureStream ? "captureStream available" : "captureStream unavailable") + (recording ? " · recording" : ""),
     navigator.mediaDevices?.getDisplayMedia ? (capture ? [...capture.entries.values()].filter(entry => entry.kind === "display").length : [...renderer.cache.values()].filter(resource => resource.stream?.active).length) + " live · tab/window/screen picker available" : "unavailable",
+    scene.hands ? renderer.hands?.status || "starting" : "off",
     stats.error || "—",
   ];
   const blurInfo = $("#camera-blur-info");
@@ -254,10 +256,11 @@ function syncTransforms(item) {
 
 // Experiments: optional per-layer effects. The panel stays collapsed so the main controls stay primary.
 const fxInputs = [...$("#fx-panel").querySelectorAll("[data-fx]")];
-const fxDefault = { look: "none", move: "none", exit: "none", amount: .5, gone: false, at: 0 };
+const fxDefault = { fill: "own", look: "none", move: "none", exit: "none", amount: .5, gone: false, at: 0, ix: .5, iy: .45 };
 const fxNames = {
-  none: "None", knit: "Knit", halftone: "Halftone", tube: "CRT",
-  silk: "Silk", jelly: "Jelly", melt: "Melt", rays: "Lamp rays",
+  own: "Own", camera: "Camera", glass: "Frosted glass", echo: "Echo", prism: "Prism",
+  none: "None", knit: "Knit", halftone: "Halftone", tube: "CRT", neon: "Neon", rain: "Rain ✦", pool: "Pool ✦",
+  silk: "Silk", jelly: "Jelly", melt: "Melt", rays: "Lamp rays", water: "Water ✦", lens: "Lens ✦", smudge: "Smudge ✦",
   shatter: "Shatter", swarm: "Swarm", burn: "Burn", vortex: "Black hole",
 };
 for (const [key, kinds] of Object.entries(lab.fxKinds)) $("[data-fx=" + key + "]").append(...kinds.map(kind => option(kind, fxNames[kind])));
@@ -268,7 +271,8 @@ function syncFx(item) {
   const labels = lab.fx.exitLabels[fx.exit];
   $("#fx-play").hidden = !labels;
   if (labels) $("#fx-play").textContent = labels[Number(fx.gone)] + " · X";
-  $("#fx-panel summary").textContent = lab.fx.active({ fx }) ? "Experiments ✦" : "Experiments";
+  $("#fx-panel summary").textContent = lab.fx.active({ fx }) || scene.hands ? "Experiments ✦" : "Experiments";
+  $("#fx-hands").checked = !!scene.hands;
 }
 for (const input of fxInputs) input.addEventListener("input", () => {
   const item = selected();
@@ -279,17 +283,64 @@ for (const input of fxInputs) input.addEventListener("input", () => {
   updateItem(item, { fx: { ...fxDefault, ...item.fx, [key]: value, ...(key === "exit" && { gone: false, at: 0 }) } });
   syncFx(item);
 });
-function playExit() {
-  const item = selected();
+// impact: where the exit starts, as fractions of the layer box (a double-tap point).
+function playExit(item = selected(), impact = {}) {
   if (!item?.fx || item.fx.exit === "none") return;
   // smooth() is symmetric, so reversing mid-flight from the mirrored elapsed time continues without a jump.
   const ms = lab.fx.exitMs[item.fx.exit];
   const elapsed = item.fx.at ? Math.min(ms, Date.now() - item.fx.at) : ms;
-  updateItem(item, { fx: { ...item.fx, gone: !item.fx.gone, at: Date.now() - (ms - elapsed) } });
-  syncFx(item);
+  updateItem(item, { fx: { ...item.fx, ...impact, gone: !item.fx.gone, at: Date.now() - (ms - elapsed) } });
+  if (item === selected()) syncFx(item);
   if (!live) tell("Played in Studio. Turn on Live to play exits in calls as they happen.");
 }
-button("#fx-play", playExit);
+button("#fx-play", () => playExit());
+
+// Touch tool: taps and drags become scene pokes, which effects react to here and in calls.
+let lastPoke = { at: 0, x: 0, y: 0 };
+function poke(point, kind) {
+  const at = Date.now();
+  if (kind === "drag" && at - lastPoke.at < 30) return;
+  const dt = Math.max(16, at - lastPoke.at) / 1000;
+  const motion = kind === "drag" ? { vx: (point.x - lastPoke.x) / dt, vy: (point.y - lastPoke.y) / dt } : {};
+  lastPoke = { at, ...point };
+  scene.pokes = [...(scene.pokes || []).filter(old => at - old.at < 3000), { ...point, at, kind, ...motion }].slice(-16);
+  changed();
+}
+director.addEventListener("dblclick", event => {
+  if (tool !== "touch") return;
+  const point = pointer(event);
+  const target = lab.ordered(scene.layers).toReversed().find(item => {
+    if (item.fx?.exit === undefined || item.fx.exit === "none") return false;
+    const local = lab.toLocal(item, point);
+    return local.x >= 0 && local.y >= 0 && local.x <= item.w && local.y <= item.h;
+  }) || scene.layers.toReversed().find(item => item.fx?.gone && item.fx.exit !== "none");
+  if (!target) return;
+  const local = lab.toLocal(target, point);
+  playExit(target, { ix: Math.min(1, Math.max(0, local.x / target.w)), iy: Math.min(1, Math.max(0, local.y / target.h)) });
+});
+
+// Hand gestures are opt-in: turning them on downloads the model once (about 8 MB), with progress.
+function handTracker() {
+  if (!scene.hands) { renderer.hands?.close(); renderer.hands = null; return; }
+  renderer.hands ??= demo.has("fake-hands") ? fakeHands() : createHands();
+}
+$("#fx-hands").addEventListener("change", async event => {
+  const input = event.target;
+  if (input.checked && !demo.has("fake-hands") && !await modelCached()) {
+    input.disabled = true;
+    try {
+      await loadModel(fraction => tell("Downloading the hand gesture model (8 MB) · " + Math.round(fraction * 100) + "%"));
+      tell("Hand gestures on. Show a hand to the camera.");
+    } catch (error) {
+      input.checked = false;
+      tell("Could not download the hand model. " + error.message, true);
+      return;
+    } finally { input.disabled = false; }
+  }
+  scene.hands = input.checked;
+  handTracker();
+  changed();
+});
 function nativeRatio(item) {
   if (!item.lockAspect) return undefined;
   const [w, h] = renderer.sourceSize(item) || [item.w, item.h];
@@ -521,6 +572,7 @@ function replaceScene(value, id = "", files = null) {
   for (const id of cameras.keys()) closeCamera(id);
   scene = next;
   libraryId = id;
+  handTracker();
   sessionFiles.clear();
   displayRequests.clear();
   inkHistory.clear();
@@ -658,6 +710,12 @@ const pointer = event => lab.stagePoint(stage.getBoundingClientRect(), event.cli
 director.addEventListener("pointerdown", event => {
   if (!event.isPrimary || event.button !== 0 || tool === "interact" || gesture) return;
   const start = pointer(event);
+  if (tool === "touch") {
+    poke(start, "tap");
+    gesture = { touch: true };
+    director.setPointerCapture(event.pointerId);
+    return;
+  }
   if (tool === "select") {
     const corner = event.target.dataset.corner;
     const hits = lab.ordered(scene.layers).filter(item => {
@@ -689,6 +747,7 @@ director.addEventListener("pointermove", event => {
   if (!gesture || !director.hasPointerCapture(event.pointerId)) return;
   const { item, stroke, start, base, corner, ratio, targets } = gesture;
   const point = pointer(event);
+  if (gesture.touch) { poke(point, "drag"); return; }
   if (stroke) {
     const next = inkPoint(item, point);
     const last = stroke.points.at(-1);
@@ -708,8 +767,9 @@ director.addEventListener("pointermove", event => {
 });
 for (const event of ["pointerup", "pointercancel", "lostpointercapture"]) director.addEventListener(event, () => {
   if (!gesture) return;
-  const { item, stroke } = gesture;
+  const { item, stroke, touch } = gesture;
   gesture = null;
+  if (touch) return;
   showSnap();
   if (!stroke) updateItem(item, {});
   else changed();
@@ -738,7 +798,7 @@ window.addEventListener("keydown", event => {
   if (event.defaultPrevented || origin.closest?.("input, select, textarea, [contenteditable], dialog[open]")) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") { event.preventDefault(); undo(); return; }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
-  const next = { v: "select", p: "pen", h: "highlighter", e: "eraser", i: "interact" }[event.key.toLowerCase()];
+  const next = { v: "select", p: "pen", h: "highlighter", e: "eraser", i: "interact", t: "touch" }[event.key.toLowerCase()];
   if (next) setTool(next);
   if (event.key.toLowerCase() === "x") playExit();
   if (event.key === "Escape") setTool("select");
@@ -1175,6 +1235,7 @@ async function refreshCallScripts() {
   if (listChanged || callScriptsDigest) tell("Updated Lightwell for call tabs. Reload open call tabs to use it.");
 }
 if (extension) refreshCallScripts().catch(error => tell("Could not update call tabs. Reload Lightwell on the extensions page. " + error.message, true));
+handTracker();
 void updateDevices();
 renderer.start();
 $("#live-mode").disabled = !extension;

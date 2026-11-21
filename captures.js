@@ -1,5 +1,6 @@
 // @ts-check
 import "./scene.js";
+import "./touch.js";
 import "./compositor.js";
 import { createSegmenter } from "./segmentation.js";
 import { frameSampler } from "./publication.js";

@@ -381,6 +381,18 @@ try {
   });
   verify("A finished experimental exit hides the HTML layer in the decoded call");
 
+  liveUpdate.layers[1].fx = { fill: "camera" };
+  await worker.evaluate(callScene => chrome.storage.local.set({ callScene }), liveUpdate);
+  await caller.waitForFunction(() => {
+    const video = document.querySelector("#remote-view");
+    const c = new OffscreenCanvas(1, 1);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(video, 5, 5, 1, 1, 0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return Math.abs(r - g) < 30 && Math.abs(g - b) < 30 && r > 40;
+  });
+  verify("Camera fill paints the call's own camera inside an HTML layer in the decoded call");
+
   const primer = await context.newPage();
   await primer.goto(fixtureURL + "/studio.html?fresh");
   const digest = () => primer.evaluate(async () => (await chrome.storage.local.get("callScriptsDigest")).callScriptsDigest);
@@ -588,6 +600,61 @@ try {
   await liveStudio.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(850, 245, 1, 1).data[1] > 190, null, { timeout: 6000 });
   await screenshot(liveStudio, "experiments.png");
   verify("Experiments change the look, play an exit and bring the layer back with X");
+
+  // Fake hands stand in for MediaPipe; the camera fills the stage, so hand fractions map straight to stage units.
+  const play = watch(await context.newPage());
+  await play.goto(origin + "/studio.html?fresh&fake-hands");
+  await canRead(play);
+  const fakeHand = (u, v, gesture = "None", pinch = false) => {
+    const points = Array.from({ length: 21 }, () => [u, v]);
+    points[0] = [u, v + .2]; points[9] = [u, v]; points[8] = [u, v - .05]; points[4] = pinch ? [u + .005, v - .05] : [u - .1, v];
+    return [{ points, gesture, score: .9 }];
+  };
+  const magenta = (x, y) => play.evaluate(([x, y]) => {
+    const [r, g, b] = document.querySelector("#stage").getContext("2d").getImageData(x, y, 1, 1).data;
+    return r > 200 && g < 60 && b > 200;
+  }, [x, y]);
+  await importScene(play, { version: 1, name: "Hands", hands: true, layers: [
+    { type: "camera", name: "Camera", source: { device: "synthetic" } },
+    { type: "html", name: "Stamp", x: 820, y: 280, w: 300, h: 160, fx: { exit: "burn" },
+      source: { template: "custom", markup: '<section style="width:100%;height:100%;background:#ff00ff"></section>' } },
+  ] });
+  await play.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(970, 360, 1, 1).data[1] < 60);
+  await play.evaluate(hand => { globalThis.lightwellFakeHands = hand; }, fakeHand(970 / 1280, 380 / 720, "None", true));
+  await delay(300);
+  await play.evaluate(hand => { globalThis.lightwellFakeHands = hand; }, fakeHand(390 / 1280, 380 / 720, "None", true));
+  await play.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(380, 360, 1, 1).data[1] < 60, null, { timeout: 4000 });
+  assert.equal(await magenta(1050, 360), false);
+  await play.evaluate(hand => { globalThis.lightwellFakeHands = hand; }, fakeHand(390 / 1280, 380 / 720, "Closed_Fist"));
+  await play.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(380, 360, 1, 1).data[1] > 60, null, { timeout: 6000 });
+  assert.match(await play.locator("#diagnostic-values").textContent(), /HandsFake hands/);
+  verify("Hand gestures pinch-drag a layer and a fist burns it away");
+
+  await importScene(play, { version: 1, name: "Touch", layers: [
+    { type: "markdown", name: "Pond", x: 0, y: 0, w: 1280, h: 720, fx: { move: "water", amount: .8 }, source: { text: "# Ripple ripple ripple\nripple ripple", size: 90, color: "#ffffff" } },
+  ] });
+  await delay(400);
+  const still = await hashRegion(play, "#stage", [100, 100, 900, 400]);
+  await delay(300);
+  assert.equal(await hashRegion(play, "#stage", [100, 100, 900, 400]), still, "calm water is still");
+  await play.keyboard.press("t");
+  const box = await play.locator("#stage").boundingBox();
+  await play.mouse.move(box.x + box.width * .3, box.y + box.height * .3);
+  await play.mouse.down();
+  await play.mouse.move(box.x + box.width * .6, box.y + box.height * .5, { steps: 8 });
+  await play.mouse.up();
+  await delay(150);
+  assert.notEqual(await hashRegion(play, "#stage", [100, 100, 900, 400]), still);
+  await delay(4500);
+  const calm = await hashRegion(play, "#stage", [100, 100, 900, 400]);
+  await play.getByRole("button", { name: "Select Pond", exact: true }).click();
+  await play.locator('#source-fields textarea').press("End");
+  await play.locator('#source-fields textarea').type("!", { delay: 30 });
+  await delay(200);
+  assert.notEqual(await hashRegion(play, "#stage", [100, 100, 900, 400]), calm);
+  await screenshot(play, "touch-water.png");
+  await play.close();
+  verify("Touch tool drags and typing ripple a WebGL water layer");
 
   await liveStudio.getByRole("button", { name: "New", exact: true }).click();
   async function startLayerCamera(x, brightness) {

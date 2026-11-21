@@ -1,6 +1,7 @@
 // @ts-check
 // Experimental layer effects. Each layer is flattened to a bitmap (HTML via drawElementImage), then:
-// look (bitmap -> bitmap material) -> motion (ambient) or exit (one-shot, triggered, reversible).
+// fill (what paints its shape) -> look (material) -> motion (ambient) or exit (one-shot, triggered, reversible).
+// Effects get item-local touches (touch.js) from the Studio Touch tool, typing and hand gestures.
 // Everything is Canvas 2D: strips, tiles, clipped shards, masks and additive copies. No WebGL.
 // Exit timing uses Date.now() so Studio and call tabs on the same machine play the same moment.
 (() => {
@@ -49,8 +50,78 @@
     return canvas;
   }
 
+  // A WebGL effect from gl.js. Looks copy the shared GL canvas out, since a motion may use it next.
+  // Each effect keeps its own GPU resources in its own sub-bag. Without WebGL the layer is drawn unchanged.
+  function shader(name, args) {
+    const out = lab.gl?.run(name, { ...args, bag: args.bag["gl-" + name] ??= {} });
+    if (!out && !args.bag.warned) {
+      args.bag.warned = true;
+      console.warn("Lightwell:", name, "needs WebGL2.", lab.gl?.failure ?? "");
+    }
+    return out;
+  }
+  const lookShader = name => args => {
+    const out = shader(name, args);
+    if (!out) return args.src;
+    const { canvas, ctx } = buffer(args.bag, "glcopy", out.width, out.height);
+    ctx.drawImage(out, 0, 0);
+    return canvas;
+  };
+  const moveShader = name => args => args.ctx.drawImage(shader(name, args) ?? args.src, 0, 0, args.w, args.h);
+
+  // ---------- Fills: what paints the layer's shape (alpha is kept) ----------
+  function filled(bag, src, paint) {
+    const { canvas, ctx } = buffer(bag, "fill", src.width, src.height);
+    ctx.drawImage(src, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    return paint(ctx, src.width, src.height) === false ? src : canvas;
+  }
+  const fills = {
+    // Your camera inside the shape: letters, ink strokes or a card cut out of your video.
+    camera: ({ src, bag, env }) => filled(bag, src, (ctx, w, h) => env.camera(ctx, w, h)),
+    // The whole output frame inside the shape, which then contains itself again: a Droste tunnel.
+    echo: ({ src, bag, env }) => filled(bag, src, (ctx, w, h) => {
+      if (!env.echo) return false;
+      ctx.drawImage(env.echo, ...lab.fitRect(env.echo.width, env.echo.height, w, h, "cover"));
+    }),
+    // A slowly turning spectrum.
+    prism: ({ src, bag, now }) => filled(bag, src, (ctx, w, h) => {
+      const fill = ctx.createConicGradient(now / 2200, w / 2, h / 2);
+      ["#ff5d8f", "#ffb347", "#f9f871", "#6dffb0", "#5ec8ff", "#a78bff", "#ff5d8f"].forEach((color, i, all) => fill.addColorStop(i / (all.length - 1), color));
+      ctx.fillStyle = fill;
+      ctx.fillRect(0, 0, w, h);
+    }),
+    // Frosted glass: whatever is under the layer, blurred and milky, with the layer's own content faint on top.
+    glass({ src, bag, env, item, k }) {
+      const { canvas, ctx } = buffer(bag, "fill", src.width, src.height);
+      if (!env.backdrop(ctx, item, k)) return src;
+      ctx.fillStyle = "rgb(255 255 255 / .12)";
+      ctx.fillRect(0, 0, src.width, src.height);
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.drawImage(src, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = .5;
+      ctx.drawImage(src, 0, 0);
+      return canvas;
+    },
+  };
+
   // ---------- Looks: bitmap -> bitmap of the same size ----------
   const looks = {
+    // Neon tube: two blurred, brightened copies added under a crisp core. Lovely on pen ink.
+    neon({ src, bag, k, amount }) {
+      const { canvas, ctx } = buffer(bag, "look", src.width, src.height);
+      ctx.filter = "blur(" + (4 + 10 * amount) * k + "px) saturate(1.8) brightness(1.5)";
+      ctx.drawImage(src, 0, 0);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.filter = "blur(" + (1.5 * k) + "px) saturate(1.5) brightness(1.3)";
+      ctx.drawImage(src, 0, 0);
+      ctx.filter = "none";
+      ctx.drawImage(src, 0, 0);
+      return canvas;
+    },
+    rain: lookShader("rain"),
+    pool: lookShader("pool"),
     // Knitted wool: a colour mosaic, shaded by one repeating stitch tile, cut back to the layer's alpha.
     knit({ src, bag, k, amount }) {
       const cw = Math.max(4, (5 + 9 * amount) * k);
@@ -141,15 +212,20 @@
   // ---------- Motions: draw the bitmap into item space (0..w, 0..h), alive over time ----------
   const moves = {
     // A flag pinned on its left edge: columns ride a travelling wave and are lit by its slope.
-    silk({ ctx, src, bag, w, h, k, amount, now }) {
+    silk({ ctx, src, bag, w, h, k, amount, now, touches }) {
       const lift = h * .09 * amount * k;
-      const { canvas, ctx: o } = buffer(bag, "move", src.width, src.height + lift * 2);
+      const pad = lift + h * .12 * k;
+      const { canvas, ctx: o } = buffer(bag, "move", src.width, src.height + pad * 2);
       const count = 64;
       const cw = src.width / count;
+      const pokes = touches.filter(touch => touch.age < 1500);
       for (let i = 0; i < count; i++) {
         const u = i / count;
         const phase = u * 2.6 * Math.PI - now / 430;
-        const dy = lift + lift * u * Math.sin(phase);
+        // A touch sets a local ripple running through the cloth, fading over 1.5 s.
+        const poke = pokes.reduce((sum, touch) => sum + h * .12 * k * (1 - touch.age / 1500) *
+          Math.exp(-(((u * w - touch.x) / (w * .12)) ** 2)) * Math.sin(touch.age / 70), 0);
+        const dy = pad + lift * u * Math.sin(phase) + poke;
         o.globalCompositeOperation = "source-over";
         o.drawImage(src, i * cw, 0, cw + 1, src.height, i * cw, dy, cw + 1, src.height);
         o.globalCompositeOperation = "source-atop";
@@ -157,13 +233,15 @@
         o.fillStyle = light > 0 ? "rgb(255 255 255 / " + light * .22 + ")" : "rgb(0 0 0 / " + -light * .38 + ")";
         o.fillRect(i * cw, 0, cw + 1, canvas.height);
       }
-      ctx.drawImage(canvas, 0, -lift / k, w, h + lift * 2 / k);
+      ctx.drawImage(canvas, 0, -pad / k, w, h + pad * 2 / k);
     },
     // Set in jelly on a plate: the base stays put, the top sways and the whole slab breathes.
-    jelly({ ctx, src, w, h, amount, now }) {
+    jelly({ ctx, src, w, h, amount, now, touches }) {
       const count = 40;
       const rh = src.height / count;
-      const sway = w * .06 * amount * Math.sin(now / 260) * (.6 + .4 * Math.sin(now / 1900));
+      // A touch flicks the slab away from the side it lands on; the flick rings down in about a second.
+      const flick = touches.reduce((sum, touch) => sum + (touch.age < 1400 ? w * .09 * Math.exp(-touch.age / 380) * Math.sin(touch.age / 48) * Math.sign(w / 2 - touch.x) : 0), 0);
+      const sway = w * .06 * amount * Math.sin(now / 260) * (.6 + .4 * Math.sin(now / 1900)) + flick;
       const squash = 1 + .05 * amount * Math.sin(now / 130);
       for (let i = 0; i < count; i++) {
         const v = 1 - i / count;
@@ -191,13 +269,16 @@
       }
     },
     // A swinging lamp behind the layer: additive, scaled copies streak light away from it.
-    rays({ ctx, src, bag, w, h, k, amount, now }) {
+    rays({ ctx, src, bag, w, h, k, amount, now, touches }) {
       const soft = buffer(bag, "soft", src.width, src.height);
       soft.ctx.filter = "blur(" + 3 * k + "px)";
       soft.ctx.drawImage(tinted(bag, src, "#ffc27a"), 0, 0);
       const glow = soft.canvas;
-      const ox = w * (.5 + .38 * Math.sin(now / 2100));
-      const oy = -h * .35;
+      // The lamp swings by itself, or follows a finger or touch for 4 s.
+      const last = touches.at(-1);
+      const goal = last && last.age < 4000 ? [last.x, last.y] : [w * (.5 + .38 * Math.sin(now / 2100)), -h * .35];
+      bag.lamp = bag.lamp ? bag.lamp.map((value, i) => value + (goal[i] - value) * .2) : goal;
+      const [ox, oy] = bag.lamp;
       const base = ctx.globalAlpha;
       ctx.drawImage(src, 0, 0, w, h);
       ctx.globalCompositeOperation = "lighter";
@@ -208,6 +289,9 @@
         ctx.drawImage(glow, ox - ox * scale, oy + (-oy) * scale, w * scale, h * scale);
       }
     },
+    water: moveShader("water"),
+    lens: moveShader("lens"),
+    smudge: moveShader("smudge"),
   };
 
   // Grains for swarm and vortex: a grid of small tiles that each carry their own pixels.
@@ -234,11 +318,11 @@
   // ---------- Exits: p = 0 intact .. 1 gone. Played forward to leave, backward to return ----------
   const exits = {
     // Glass: radial + ring cracks into shards that fly under gravity; returning shards seal with gold.
-    shatter({ ctx, src, bag, w, h, k, p, seam }) {
-      const shards = memo(bag, "shards", [w, h].join(), () => {
+    shatter({ ctx, src, bag, w, h, k, p, seam, fx }) {
+      const shards = memo(bag, "shards", [w, h, fx.ix, fx.iy].join(), () => {
         const rand = random(bag.seed + "glass");
-        const cx = w * (.35 + rand() * .3);
-        const cy = h * (.3 + rand() * .3);
+        const cx = w * fx.ix;
+        const cy = h * fx.iy;
         const spokes = 13;
         const reach = Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy)) * 1.05;
         const rings = [0, .12, .28, .5, .75, 1].map(r => r * reach);
@@ -397,14 +481,18 @@
     if (fx.gone) return { p: t, seam: 0 };
     return { p: 1 - t, seam: fx.exit === "shatter" ? smooth(clamp(elapsed / ms)) ** 3 * clamp((ms + seamMs - elapsed) / seamMs) : 0 };
   }
-  const active = item => !!item.fx && (item.fx.look !== "none" || item.fx.move !== "none" || item.fx.exit !== "none");
-  // Effects draw outside the layer box (rays, shards, flocks), so the layer clip is baked into `flat`.
-  function draw(ctx, flat, item, now, bag) {
+  const active = item => !!item.fx && ((item.fx.fill ?? "own") !== "own" || item.fx.look !== "none" || item.fx.move !== "none" || item.fx.exit !== "none");
+  /**
+   * Effects draw outside the layer box (rays, shards, flocks), so the layer clip is baked into `flat`.
+   * env (from the compositor): touches(item), camera(ctx, w, h), backdrop(ctx, item, k) and echo (last frame).
+   */
+  function draw(ctx, flat, item, now, bag, env) {
     const { fx, w, h, id } = item;
     bag.seed = id;
     const k = flat.width / w;
-    const args = { ctx, bag, w, h, k, amount: fx.amount, now };
-    const src = fx.look === "none" ? flat : looks[fx.look]({ ...args, src: flat });
+    const args = { ctx, bag, w, h, k, amount: fx.amount, now, fx, item, env, touches: env.touches(item) };
+    const fill = (fx.fill ?? "own") === "own" ? flat : fills[fx.fill]({ ...args, src: flat });
+    const src = fx.look === "none" ? fill : looks[fx.look]({ ...args, src: fill });
     const { p, seam } = exitState(fx);
     if (p >= 1) return;
     if (p > 0 || seam > 0) return exits[fx.exit]({ ...args, src, p, seam });

@@ -192,6 +192,13 @@
     ctx.clip();
   }
 
+  const mediaSize = source => {
+    if ("readyState" in source && source.readyState < 2) return null;
+    const w = source.videoWidth ?? source.naturalWidth ?? source.displayWidth ?? source.width;
+    const h = source.videoHeight ?? source.naturalHeight ?? source.displayHeight ?? source.height;
+    return w && h ? [w, h] : null;
+  };
+
   function clipLayer(ctx, item) {
     paintClip(ctx, item);
     if (!item.crop || [...mediaTypes, "camera", "display", "html"].includes(item.type)) return;
@@ -224,9 +231,11 @@
     ctx.globalAlpha = 1;
   }
 
+  // Returns the caret: a local point just after the last drawn word, where typing ripples start.
   function drawMarkdown(ctx, item) {
     const { text, color, size, font } = item.source;
     let y = 0;
+    let caret = { x: 0, y: size / 2 };
     let fenced = false;
     for (const line of text.split("\n")) {
       if (line.trimStart().startsWith("```")) { fenced = !fenced; continue; }
@@ -252,16 +261,18 @@
         for (const word of spelling.match(/\s+|\S+/g) || []) {
           const width = ctx.measureText(word).width;
           if (x > indent && x + width > item.w) { x = indent; y += row; }
-          if (y >= item.h) return;
+          if (y >= item.h) return caret;
           if (code) { ctx.fillStyle = "#30334a"; ctx.fillRect(x, y, width, row * .92); }
           ctx.fillStyle = color;
           ctx.fillText(word, x, y, item.w - x);
           x += width;
+          caret = { x, y: y + row / 2 };
         }
       }
       y += line ? row : row * .55;
-      if (y >= item.h) return;
+      if (y >= item.h) return caret;
     }
+    return caret;
   }
 
   class Compositor {
@@ -280,6 +291,9 @@
       this.synthetic = null;
       this.segmenter = null;
       this.osBlur = osBlurControl(null);
+      // Experimental input: Studio pokes, typing and hands. hands: { trackHands(source, now), handList }.
+      this.touch = new lab.Touch();
+      this.hands = null;
       this.renderedAt = 0;
       this.running = false;
       this.framePending = false;
@@ -406,6 +420,7 @@
           this.stats.segmentation = input.segmenter.status;
         } else if (!needsLocalMask && input.segmenter?.mask) input.segmenter.reset();
       }
+      this.trackHands(now);
       for (const item of this.scene.layers) {
         if (item.type !== "html" || this.mode === "fallback") continue;
         const cache = this.local(item);
@@ -432,6 +447,58 @@
           }
         }
       }
+    }
+
+    // The unprocessed picture of a camera layer: a remote frame, a local video or the synthetic canvas.
+    rawCamera(item) {
+      const remote = this.remoteMedia?.(item);
+      if (remote !== undefined) return remote;
+      const local = this.cameraInputs.get(item.id);
+      return local ? local.synthetic || local.video : this.synthetic || this.camera;
+    }
+    trackHands(now) {
+      const camera = this.scene.hands && this.hands && this.scene.layers.find(item => item.type === "camera" && item.visible && !item.source.cameraOff);
+      if (!camera) { this.touch.hands([], this.scene, () => ({ x: 0, y: 0 })); return; }
+      const input = this.rawCamera(camera);
+      const size = input && mediaSize(input);
+      if (size) this.hands.trackHands(input, now);
+      this.touch.hands(size ? this.hands.handList || [] : [], this.scene, (u, v) => {
+        // Landmarks are fractions of the raw frame; follow the camera layer's crop, fit, mirror and placement.
+        const [cx, cy, cw, ch] = cropRect(size[0], size[1], camera.crop);
+        const [fx, fy, fw, fh] = fitRect(cw, ch, camera.w, camera.h, camera.fit);
+        const x = fx + (u * size[0] - cx) / cw * fw;
+        const y = fy + (v * size[1] - cy) / ch * fh;
+        return lab.toWorld(camera, { x: camera.source.mirror ? camera.w - x : x, y: camera.source.flip ? camera.h - y : y });
+      });
+    }
+    // Draws the first live camera into (0, 0, w, h) of target, cover-fitted. False when there is none yet.
+    paintCamera(target, w, h) {
+      const camera = this.scene.layers.find(item => item.type === "camera" && item.visible && !item.source.cameraOff);
+      const image = camera && this.cameraImage(camera);
+      const size = image && mediaSize(image);
+      if (!size) return false;
+      target.save();
+      if (camera.source.mirror) { target.translate(w, 0); target.scale(-1, 1); }
+      target.drawImage(image, ...fitRect(size[0], size[1], w, h, "cover"));
+      target.restore();
+      return true;
+    }
+    // Draws what is already on the stage under item, blurred, into target in item-local units times k.
+    backdrop(target, item, k, [ax, ay, aw, ah]) {
+      const blur = this.blurBuffer ??= surface(320, 180);
+      const b = blur.getContext("2d");
+      b.clearRect(0, 0, 320, 180);
+      b.filter = "blur(4px)";
+      b.drawImage(this.canvas, ax, ay, aw, ah, 0, 0, 320, 180);
+      b.filter = "none";
+      target.save();
+      target.setTransform(k, 0, 0, k, 0, 0);
+      target.translate(item.w / 2, item.h / 2);
+      target.rotate(-item.rotation * Math.PI / 180);
+      target.translate(-item.x - item.w / 2, -item.y - item.h / 2);
+      target.drawImage(blur, 0, 0, W, H);
+      target.restore();
+      return true;
     }
 
     media(item) {
@@ -567,7 +634,10 @@
       } else if (type === "camera") {
         if (!this.drawCamera(ctx, item) && !this.call) this.placeholder(ctx, item, "CAMERA OFF");
       } else if (type === "markdown") {
-        drawMarkdown(ctx, item);
+        const caret = drawMarkdown(ctx, item);
+        const cache = this.local(item);
+        if (cache.text !== undefined && cache.text !== source.text) this.touch.typing(item, caret);
+        cache.text = source.text;
       } else if (type === "text") {
         ctx.fillStyle = source.color;
         ctx.font = source.size + "px Georgia,serif";
@@ -634,13 +704,21 @@
       ctx.fillStyle = "#121126";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       const [x, y, w, h] = fitRect(W, H, canvas.width, canvas.height, "contain");
+      const area = [x, y, w, h];
+      const env = {
+        touches: item => this.touch.local(this.scene, item),
+        camera: (target, width, height) => this.paintCamera(target, width, height),
+        backdrop: (target, item, k) => this.backdrop(target, item, k, area),
+        echo: this.echo,
+      };
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(w / W, h / H);
       ctx.beginPath();
       ctx.rect(0, 0, W, H);
       ctx.clip();
-      for (const item of ordered(this.scene.layers)) {
+      for (const layer of ordered(this.scene.layers)) {
+        const item = this.touch.apply(layer);
         const portal = item.revealBy && this.scene.layers.find(layer => layer.id === item.revealBy && layer.visible);
         const reveal = portal ? this.cache.get(portal.id)?.amount ?? Number(!!portal.source.active) : Number(!item.revealBy);
         ctx.save();
@@ -651,7 +729,7 @@
           ctx.rotate(item.rotation * Math.PI / 180);
           ctx.translate(-item.w / 2, -item.h / 2);
           const flat = flats.get(item.id);
-          if (flat) lab.fx.draw(ctx, flat, item, now, this.local(item).fx ??= {});
+          if (flat) lab.fx.draw(ctx, flat, item, now, this.local(item).fx ??= {}, env);
           else {
             clipLayer(ctx, item);
             this.drawLayer(ctx, item, now);
@@ -662,7 +740,23 @@
           ctx.restore();
         }
       }
+      const cursor = this.scene.hands && this.touch.cursor;
+      if (cursor) {
+        // A faint ring where the hand points, filled while pinching, so people see what the hand controls.
+        ctx.beginPath();
+        ctx.arc(cursor.x, cursor.y, cursor.pinch ? 9 : 13, 0, Math.PI * 2);
+        ctx.fillStyle = "rgb(255 255 255 / .35)";
+        ctx.strokeStyle = "rgb(255 255 255 / .7)";
+        ctx.lineWidth = 2;
+        if (cursor.pinch) ctx.fill();
+        ctx.stroke();
+      }
       ctx.restore();
+      if (this.scene.layers.some(item => item.visible && item.fx?.fill === "echo")) {
+        // The finished frame becomes the next frame's echo fill.
+        this.echo ??= surface(640, 360);
+        this.echo.getContext("2d").drawImage(this.canvas, x, y, w, h, 0, 0, 640, 360);
+      } else this.echo = null;
       this.stats.ms = performance.now() - start;
       const frameRate = clamp(1000 / (now - this.renderedAt), 0, 100);
       this.stats.fps = this.stats.fps ? this.stats.fps * .9 + frameRate * .1 : frameRate;

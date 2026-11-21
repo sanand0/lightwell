@@ -2,6 +2,7 @@
 import "./scene.js";
 import { readAssets, frameSampler, replyWithMedia } from "./publication.js";
 import { createSegmenter } from "./segmentation.js";
+import { createHands } from "./hands.js";
 import { captureCommand, captureFrame } from "./captures.js";
 
 const sessions = new Map();
@@ -21,6 +22,7 @@ function release(key) {
   if (!session) return;
   sessions.delete(key);
   session.segmenter?.close();
+  session.hands?.close();
   for (const asset of session.assets.values()) releaseAsset(asset);
 }
 
@@ -65,6 +67,12 @@ async function media(message) {
   if (kind === "release") { release(key); return {}; }
   if (kind === "capture") return captureFrame(layer, message.effect);
   const owner = sessionFor(key);
+  if (kind === "hands") {
+    // Cache only: Studio downloads the model when someone turns gestures on, never a call by surprise.
+    const hands = owner.hands ??= createHands("CPU", false);
+    hands.trackHands(frame, performance.now());
+    return { state: hands.status, hands: hands.handList };
+  }
   if (kind === "mask") {
     const segmenter = owner.segmenter ??= createSegmenter();
     segmenter.step(frame, performance.now(), false);
@@ -89,7 +97,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     return true;
   }
   if (message?.target !== "lightwell-offscreen") return;
-  if (message.kind === "mask" && !(message.frame instanceof ImageBitmap)) return;
+  if (["mask", "hands"].includes(message.kind) && !(message.frame instanceof ImageBitmap)) return;
   void media(message).then(result => replyWithMedia(reply, result), error => reply({ error: error.message })).finally(() => message.frame?.close());
   return true;
 });
