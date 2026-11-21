@@ -34,6 +34,7 @@ To see your webcam in Studio, select **Camera** in **Layers**. In **Source**, ch
 - Select **+ Add** in **Layers**. Choose **Media** for an image or video, **Markdown** for text, or **Display capture** for a browser tab, window or screen. Choose the file or enter your text in **Source**. For a screen or window, select **Choose display**.
 - Select **Select** below the preview. Drag an item to move it. Drag a corner to resize it.
 - Items at the top of the **Layers** list appear in front. Drag the grip beside a layer to change its order. Use the eye button to hide or show it.
+- To try an experimental effect, open **Experiments** for a layer. **Look** changes its material: knitted wool, halftone print or an old CRT screen. **Motion** makes it wave like silk, wobble like jelly, melt or cast lamp rays. **Exit** chooses how it leaves. Select the exit button or press X to shatter, burn, fly away as a flock or fall into a black hole, then again to bring it back. Turn on **Live** first so the call sees it.
 - Use **PNG** to save a picture of the preview. Use **Record** to save up to 8 seconds of video without sound.
 
 ## Send the picture to a call

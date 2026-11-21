@@ -22,6 +22,10 @@ Run `npm run dev` for the [development Studio](http://localhost:8765/studio.html
 - Studio camera and display captures run in the extension's background page. To release a source, use its **Stop** control or **Stop captures**. Reloading the extension or exiting the browser also releases these sources.
 - **OS blur** uses the webcam effect when the browser exposes it. The Camera inspector shows when Lightwell uses segmented blur instead. Person cutout and segmented blur use a local model. [Chrome background blur API](https://developer.chrome.com/blog/background-blur)
 
+## Experimental effects
+
+[Effects](../effects.js) adds an optional `fx` object to any layer: `{ look, move, exit, amount, gone, at }`. The compositor first flattens the layer into its own bitmap. For HTML it calls `drawElementImage` on the stage canvas, copies the result, then paints over it. The effects work only in Canvas 2D, using strips, tiles, clipped shards, masks and additive copies. A look and a motion run together, and a running exit replaces the motion. Exits store `Date.now()` in `at`, so Studio and the call tabs play the same moment. Effects ignore layer clipping because shards and rays leave the layer box. The HTML tool still hit-tests the unbent element. Software rendering costs 20-45 ms a frame on a full 1280×720 camera layer.
+
 ## Source files
 
 - [Studio](../studio.js) handles editing. [Scene](../scene.js) defines the format. [Compositor](../compositor.js) draws the result.

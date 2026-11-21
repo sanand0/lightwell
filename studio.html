@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="studio.css">
   <script defer src="scene.js"></script>
   <script defer src="html-sources.js"></script>
+  <script defer src="effects.js"></script>
   <script defer src="compositor.js"></script>
   <script type="module" src="studio.js"></script>
 </head>
@@ -109,6 +110,16 @@
             </div>
             <button id="reset-crop" type="button">Reset crop</button>
           </details>
+          <details id="fx-panel" class="inspector-details">
+            <summary>Experiments</summary>
+            <div class="grid">
+              <label>Look <select data-fx="look"></select></label>
+              <label>Motion <select data-fx="move"></select></label>
+              <label>Exit <select data-fx="exit"></select></label>
+              <label>Intensity <output data-value="amount"></output><input data-fx="amount" type="range" min="0" max="1" step=".01"></label>
+            </div>
+            <button id="fx-play" type="button" title="Play the exit, then play it back (X)" hidden>Play</button>
+          </details>
         </fieldset>
         <fieldset id="source-controls"><legend>Source</legend><div id="source-fields"></div></fieldset>
       </section>
@@ -120,7 +131,7 @@
       </div>
     </aside>
   </main>
-  <footer class="keyboard">V select · P pen · H highlight · E erase · I interact with HTML · Drag to snap · Hold Shift for free placement · Arrow keys move layer</footer>
+  <footer class="keyboard">V select · P pen · H highlight · E erase · I interact with HTML · X play exit · Drag to snap · Hold Shift for free placement · Arrow keys move layer</footer>
   <dialog id="scene-dialog">
     <form id="scene-form">
       <h2>Save scene</h2>

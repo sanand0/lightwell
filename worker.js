@@ -1,5 +1,5 @@
 // @ts-check
-const main = ["scene.js", "html-sources.js", "compositor.js", "call-media.js", "call-main.js"];
+const main = ["scene.js", "html-sources.js", "effects.js", "compositor.js", "call-media.js", "call-main.js"];
 const prefix = "lightwell";
 import "./scene.js";
 const mediaTypes = globalThis.Lightwell.mediaTypes;

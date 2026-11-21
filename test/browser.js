@@ -369,6 +369,18 @@ try {
   });
   verify("Publishing custom HTML updates the active strict-CSP call without requesting the camera again");
 
+  liveUpdate.layers[1].fx = { exit: "burn", gone: true, at: Date.now() - 10000 };
+  await worker.evaluate(callScene => chrome.storage.local.set({ callScene }), liveUpdate);
+  await caller.waitForFunction(() => {
+    const video = document.querySelector("#remote-view");
+    const c = new OffscreenCanvas(1, 1);
+    const ctx = c.getContext("2d");
+    ctx.drawImage(video, 5, 5, 1, 1, 0, 0, 1, 1);
+    const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+    return r < 90 && b > 80;
+  });
+  verify("A finished experimental exit hides the HTML layer in the decoded call");
+
   const callStudio = watch(await context.newPage());
   await callStudio.goto(fixtureURL + "/studio.html?fresh#Talking%20Head");
   const urlImage = await callStudio.evaluate(async () => {
@@ -547,6 +559,22 @@ try {
   await liveStudio.locator('[data-crop="left"]').evaluate(input => { input.value = "50"; input.dispatchEvent(new Event("input", { bubbles: true })); });
   await liveStudio.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(850, 245, 1, 1).data[1] > 190);
   verify("HTML file source and inspector crop change stage pixels");
+
+  const plain = await hashRegion(liveStudio, "#stage", [770, 120, 400, 280]);
+  await liveStudio.locator("#fx-panel summary").click();
+  await liveStudio.locator('[data-fx="look"]').selectOption("knit");
+  await liveStudio.waitForFunction(() => document.querySelector("#fx-panel summary").textContent === "Experiments ✦");
+  await delay(200);
+  assert.notEqual(await hashRegion(liveStudio, "#stage", [770, 120, 400, 280]), plain);
+  await liveStudio.locator('[data-fx="look"]').selectOption("none");
+  await liveStudio.locator('[data-fx="exit"]').selectOption("burn");
+  await liveStudio.getByRole("button", { name: "Burn · X", exact: true }).click();
+  await liveStudio.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(850, 245, 1, 1).data[1] < 120, null, { timeout: 6000 });
+  await liveStudio.getByRole("button", { name: "Unburn · X", exact: true }).waitFor();
+  await liveStudio.locator("#director").press("x");
+  await liveStudio.waitForFunction(() => document.querySelector("#stage").getContext("2d").getImageData(850, 245, 1, 1).data[1] > 190, null, { timeout: 6000 });
+  await screenshot(liveStudio, "experiments.png");
+  verify("Experiments change the look, play an exit and bring the layer back with X");
 
   await liveStudio.getByRole("button", { name: "New", exact: true }).click();
   async function startLayerCamera(x, brightness) {

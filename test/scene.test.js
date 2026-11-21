@@ -95,3 +95,14 @@ test("snapping a locked resize preserves the opposite corner and aspect ratio", 
   assert.equal(frame.w / frame.h, 2);
   assert.deepEqual(toWorld(frame, { x: 0, y: 0 }), toWorld(item, { x: 0, y: 0 }));
 });
+
+test("experimental effects normalize to known kinds and survive call publishing", () => {
+  const { layer, normalize, callScene } = globalThis.Lightwell;
+  const scene = normalize({ version: 1, layers: [
+    layer("html", { fx: { look: "knit", move: "silk", exit: "lava", amount: 4, gone: true, at: -5 } }),
+    layer("camera"),
+  ] });
+  assert.deepEqual(scene.layers[0].fx, { look: "knit", move: "silk", exit: "none", amount: 1, gone: true, at: 0 });
+  assert.equal("fx" in scene.layers[1], false);
+  assert.deepEqual(callScene(scene).layers[0].fx, scene.layers[0].fx);
+});

@@ -192,6 +192,14 @@
     ctx.clip();
   }
 
+  function clipLayer(ctx, item) {
+    paintClip(ctx, item);
+    if (!item.crop || [...mediaTypes, "camera", "display", "html"].includes(item.type)) return;
+    ctx.beginPath();
+    ctx.rect(...cropRect(item.w, item.h, item.crop));
+    ctx.clip();
+  }
+
   function strokes(cache, list) {
     if (cache.list === list && cache.count === list.length && cache.tail === list.at(-1)?.points.length) return;
     cache.list = list;
@@ -586,11 +594,42 @@
       ctx.fillText(label, item.w / 2, item.h / 2, item.w * .84);
     }
 
+    // Draws one layer, clipped, into its own bitmap so experimental effects can bend or break it.
+    flatten(item, now) {
+      const { canvas } = this;
+      // Output pixels per scene unit, capped so the HTML pre-pass fits inside the canvas it borrows.
+      const scale = Math.min(canvas.width / W, canvas.height / H, canvas.width / item.w, canvas.height / item.h);
+      const w = Math.max(1, Math.round(item.w * scale));
+      const h = Math.max(1, Math.round(item.h * scale));
+      const cache = this.local(item);
+      const flat = cache.flat ??= surface(w, h);
+      if (flat.width !== w || flat.height !== h) { flat.width = w; flat.height = h; }
+      const out = flat.getContext("2d");
+      out.clearRect(0, 0, w, h);
+      // drawElementImage only paints children of this canvas, so HTML is drawn here, copied, then painted over.
+      const html = item.type === "html";
+      const ctx = html ? this.ctx : out;
+      ctx.save();
+      ctx.resetTransform();
+      if (html) ctx.clearRect(0, 0, w, h);
+      ctx.scale(scale, scale);
+      clipLayer(ctx, item);
+      this.drawLayer(ctx, item, now);
+      ctx.restore();
+      if (html) out.drawImage(canvas, 0, 0, w, h, 0, 0, w, h);
+      return flat;
+    }
+
     render(now = performance.now()) {
       this.framePending = false;
       const start = performance.now();
       const { canvas, ctx } = this;
       this.stats.native = 0;
+      const flats = new Map();
+      for (const item of ordered(this.scene.layers)) {
+        if (!lab.fx?.active(item)) continue;
+        try { flats.set(item.id, this.flatten(item, now)); } catch (error) { this.report(item.name + " effect: " + error.message); }
+      }
       ctx.resetTransform();
       ctx.fillStyle = "#121126";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -611,13 +650,12 @@
           ctx.translate(item.x + item.w / 2, item.y + item.h / 2);
           ctx.rotate(item.rotation * Math.PI / 180);
           ctx.translate(-item.w / 2, -item.h / 2);
-          paintClip(ctx, item);
-          if (item.crop && ![...mediaTypes, "camera", "display", "html"].includes(item.type)) {
-            ctx.beginPath();
-            ctx.rect(...cropRect(item.w, item.h, item.crop));
-            ctx.clip();
+          const flat = flats.get(item.id);
+          if (flat) lab.fx.draw(ctx, flat, item, now, this.local(item).fx ??= {});
+          else {
+            clipLayer(ctx, item);
+            this.drawLayer(ctx, item, now);
           }
-          this.drawLayer(ctx, item, now);
         } catch (error) {
           this.report(item.name + ": " + error.message);
         } finally {

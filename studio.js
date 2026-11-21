@@ -247,7 +247,47 @@ function syncTransforms(item) {
     const output = $("[data-value=" + key + "]");
     if (output) output.value = item ? key === "rotation" ? Math.round(value) + "°" : Math.round(value * (key === "opacity" ? 100 : 1)) + "%" : "";
   }
+  syncFx(item);
 }
+
+// Experiments: optional per-layer effects. The panel stays collapsed so the main controls stay primary.
+const fxInputs = [...$("#fx-panel").querySelectorAll("[data-fx]")];
+const fxDefault = { look: "none", move: "none", exit: "none", amount: .5, gone: false, at: 0 };
+const fxNames = {
+  none: "None", knit: "Knit", halftone: "Halftone", tube: "CRT",
+  silk: "Silk", jelly: "Jelly", melt: "Melt", rays: "Lamp rays",
+  shatter: "Shatter", swarm: "Swarm", burn: "Burn", vortex: "Black hole",
+};
+for (const [key, kinds] of Object.entries(lab.fxKinds)) $("[data-fx=" + key + "]").append(...kinds.map(kind => option(kind, fxNames[kind])));
+function syncFx(item) {
+  const fx = item?.fx || fxDefault;
+  for (const input of fxInputs) if (document.activeElement !== input) input.value = String(fx[input.dataset.fx]);
+  $("[data-value=amount]").value = Math.round(fx.amount * 100) + "%";
+  const labels = lab.fx.exitLabels[fx.exit];
+  $("#fx-play").hidden = !labels;
+  if (labels) $("#fx-play").textContent = labels[Number(fx.gone)] + " · X";
+  $("#fx-panel summary").textContent = lab.fx.active({ fx }) ? "Experiments ✦" : "Experiments";
+}
+for (const input of fxInputs) input.addEventListener("input", () => {
+  const item = selected();
+  if (!item) return;
+  const key = input.dataset.fx;
+  const value = input.type === "range" ? input.valueAsNumber : input.value;
+  // A new exit starts with the layer present, so switching never leaves it invisible.
+  updateItem(item, { fx: { ...fxDefault, ...item.fx, [key]: value, ...(key === "exit" && { gone: false, at: 0 }) } });
+  syncFx(item);
+});
+function playExit() {
+  const item = selected();
+  if (!item?.fx || item.fx.exit === "none") return;
+  // smooth() is symmetric, so reversing mid-flight from the mirrored elapsed time continues without a jump.
+  const ms = lab.fx.exitMs[item.fx.exit];
+  const elapsed = item.fx.at ? Math.min(ms, Date.now() - item.fx.at) : ms;
+  updateItem(item, { fx: { ...item.fx, gone: !item.fx.gone, at: Date.now() - (ms - elapsed) } });
+  syncFx(item);
+  if (!live) tell("Played in Studio. Turn on Live to play exits in calls as they happen.");
+}
+button("#fx-play", playExit);
 function nativeRatio(item) {
   if (!item.lockAspect) return undefined;
   const [w, h] = renderer.sourceSize(item) || [item.w, item.h];
@@ -698,6 +738,7 @@ window.addEventListener("keydown", event => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   const next = { v: "select", p: "pen", h: "highlighter", e: "eraser", i: "interact" }[event.key.toLowerCase()];
   if (next) setTool(next);
+  if (event.key.toLowerCase() === "x") playExit();
   if (event.key === "Escape") setTool("select");
   const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
   const item = selected();

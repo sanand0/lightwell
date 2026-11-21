@@ -12,6 +12,8 @@
   const clips = ["none", "rounded", "ellipse"];
   const blends = ["source-over", "multiply", "screen", "overlay", "lighter", "difference"];
   const effects = ["original", "os", "blur", "cutout"];
+  // Experimental layer effects (see effects.js): a material look, an ambient motion and a triggered exit.
+  const fxKinds = { look: ["none", "knit", "halftone", "tube"], move: ["none", "silk", "jelly", "melt", "rays"], exit: ["none", "shatter", "swarm", "burn", "vortex"] };
   const cameraFrames = {
     Corner: { x: 850, y: 460, w: 388, h: 220, clip: "rounded" },
     Side: { x: 720, y: 0, w: 560, h: 720, clip: "none" },
@@ -60,9 +62,17 @@
         lockAspect: item.lockAspect !== false, crop: normalizeCrop(item.crop),
         fit: oneOf(item.fit ?? (item.type === "media" ? "contain" : "cover"), fits), clip: oneOf(item.clip, clips), blend: oneOf(item.blend, blends),
         source: normalizeSource(item.type, item.source ?? {}),
+        ...(item.fx && { fx: normalizeFx(item.fx) }),
       };
     });
     return { version: 1, name: str(scene.name, "Untitled scene", 80), layers };
+  }
+
+  function normalizeFx(fx) {
+    return {
+      ...Object.fromEntries(Object.entries(fxKinds).map(([key, kinds]) => [key, oneOf(fx[key], kinds)])),
+      amount: n(fx.amount, .5, 0, 1), gone: fx.gone === true, at: n(fx.at, 0, 0, 1e14),
+    };
   }
 
   function normalizeCrop(value) {
@@ -272,5 +282,5 @@
   }
 
   globalThis.Lightwell ??= {};
-  Object.assign(globalThis.Lightwell, { W, H, types, mediaTypes, fonts, cropEdges, cropRect, videoURL, fits, clips, blends, effects, cameraFrames, transform, layer, normalize, ordered, toWorld, toLocal, resize, snapTargets, snapMove, snapResize, stagePoint, fitRect, defaultScene, preset, callScene });
+  Object.assign(globalThis.Lightwell, { W, H, types, mediaTypes, fonts, cropEdges, cropRect, videoURL, fits, clips, blends, effects, fxKinds, cameraFrames, transform, layer, normalize, ordered, toWorld, toLocal, resize, snapTargets, snapMove, snapResize, stagePoint, fitRect, defaultScene, preset, callScene });
 })();
