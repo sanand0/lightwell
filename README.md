@@ -34,7 +34,13 @@ To see your webcam in Studio, select **Camera** in **Layers**. In **Source**, ch
 - Select **+ Add** in **Layers**. Choose **Media** for an image or video, **Markdown** for text, or **Display capture** for a browser tab, window or screen. Choose the file or enter your text in **Source**. For a screen or window, select **Choose display**.
 - Select **Select** below the preview. Drag an item to move it. Drag a corner to resize it.
 - Items at the top of the **Layers** list appear in front. Drag the grip beside a layer to change its order. Use the eye button to hide or show it.
-- To try an experimental effect, open **Experiments** for a layer. **Look** changes its material: knitted wool, halftone print or an old CRT screen. **Motion** makes it wave like silk, wobble like jelly, melt or cast lamp rays. **Exit** chooses how it leaves. Select the exit button or press X to shatter, burn, fly away as a flock or fall into a black hole, then again to bring it back. Turn on **Live** first so the call sees it.
+- To try an experimental effect, open **Experiments** for a layer. Mix one choice from each list:
+  - **Fill** paints the layer's shape: your **Camera** (try big text so your face shows through the letters), **Frosted glass**, **Echo** (the whole picture inside itself) or **Prism**.
+  - **Look** changes its material: knitted wool, halftone print, an old CRT screen, neon, rain on a window or a sunlit pool.
+  - **Motion** keeps it moving: a silk flag, jelly, melting, lamp rays, water ripples, a magnifying lens or a smudge that heals.
+  - **Exit** chooses how it leaves. Select the exit button or press X to shatter, burn, fly away as a flock or fall into a black hole, then press X again to bring it back.
+- Select **Touch** (T) to poke the effects: tap or drag to make ripples, gusts and smudges, or to move the lens or lamp. Double-tap a layer to play its exit from that point. Typing in a Markdown layer makes ripples as you type.
+- Turn on **Hand gestures** to control effects with your hand in the call: point to touch, pinch to move a layer, make a fist to play a layer's exit and open your palm to bring it back. The first time, Lightwell downloads an 8 MB model from Google. Turn on **Live** first so the call sees what you play.
 - Use **PNG** to save a picture of the preview. Use **Record** to save up to 8 seconds of video without sound.
 
 ## Send the picture to a call

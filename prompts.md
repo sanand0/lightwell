@@ -32,6 +32,8 @@ Commit into a new branch as you go. Commit what you have so far (including promp
 
 I'd rather large downloads were optional and on-demand, e.g. if I'm on a slow network.
 
+<!-- claude --resume 6659132a-22bb-440c-8af1-166127e327ae -->
+
 ## Polish, 20 Nov 2026
 
 <!--

@@ -55,7 +55,8 @@
     if (!alive.size) return competing ? "Another camera wrapper was present." : "Ready · start the site's camera";
     const sample = [...alive][0];
     const { osBlur, segmentation } = sample.compositor.stats;
-    return [scene.name, sample.compositor.mode + " HTML", osBlur, segmentation !== "idle" && segmentation, sample.media.summary(scene)].filter(Boolean).join(" · ");
+    const hands = scene.hands && (sample.media.handStatus || "Hands starting");
+    return [scene.name, sample.compositor.mode + " HTML", osBlur, segmentation !== "idle" && segmentation, hands, sample.media.summary(scene)].filter(Boolean).join(" · ");
   }
   function placePanel() {
     if (!panel || !panelPosition) return;

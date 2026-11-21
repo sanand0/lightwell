@@ -24,11 +24,24 @@ Run `npm run dev` for the [development Studio](http://localhost:8765/studio.html
 
 ## Experimental effects
 
-[Effects](../effects.js) adds an optional `fx` object to any layer: `{ look, move, exit, amount, gone, at }`. The compositor first flattens the layer into its own bitmap. For HTML it calls `drawElementImage` on the stage canvas, copies the result, then paints over it. The effects work only in Canvas 2D, using strips, tiles, clipped shards, masks and additive copies. A look and a motion run together, and a running exit replaces the motion. Exits store `Date.now()` in `at`, so Studio and the call tabs play the same moment. Effects ignore layer clipping because shards and rays leave the layer box. The HTML tool still hit-tests the unbent element. Software rendering costs 20-45 ms a frame on a full 1280×720 camera layer.
+[Effects](../effects.js) adds an optional `fx` object to any layer: `{ fill, look, move, exit, amount, gone, at, ix, iy }`. The compositor first flattens the layer into its own bitmap. For HTML it calls `drawElementImage` on the stage canvas, copies the result, then paints over it. The bitmap then goes through a fill, a look, and then a motion or, while it runs, an exit. Most effects use Canvas 2D. Rain, pool, water, lens and smudge use one shared WebGL2 context in [gl.js](../gl.js), and draw the layer unchanged when WebGL2 is unavailable. Exits store `Date.now()` in `at`, so Studio and the call tabs play the same moment, and `ix`/`iy` is where an exit starts. Effects ignore layer clipping because shards and rays leave the layer box. The HTML tool still hit-tests the unbent element.
+
+[Touch](../touch.js) turns input into points that effects react to:
+
+- Studio Touch-tool taps and drags travel to calls as `scene.pokes`.
+- Each page detects typing from Markdown text changes.
+- Hands come from MediaPipe's gesture recogniser in [hands.js](../hands.js). In a call, the frames go to the offscreen page, as segmentation does.
+- Gesture actions (pinch to drag, fist and palm for exits) change only the page's own drawing, not the scene.
+
+The model downloads when someone turns on **Hand gestures** in Studio and is kept in Cache Storage. The offscreen page never downloads it. Use `?fake-hands` in the development Studio and set `globalThis.lightwellFakeHands` to script hands.
+
+Studio refreshes the registered call scripts when their contents change, because Chrome keeps them in memory until they are registered again. Reload open call tabs afterwards.
+
+Cost per frame on a full 1280×720 camera layer, in Edge 157 with an Intel Arc GPU: under 1.5 ms for every effect, except about 11 ms for Swarm. Headless software rendering takes 20-90 ms. Gesture inference takes about 70 ms a frame in software, and runs about 12 times a second.
 
 ## Source files
 
-- [Studio](../studio.js) handles editing. [Scene](../scene.js) defines the format. [Compositor](../compositor.js) draws the result.
+- [Studio](../studio.js) handles editing. [Scene](../scene.js) defines the format. [Compositor](../compositor.js) draws the result, with [effects](../effects.js), [WebGL effects](../gl.js) and [touch input](../touch.js).
 - [Publication](../publication.js) stores saved scenes and their local files.
 - [Worker](../worker.js) registers scripts for approved websites. [Call](../call-main.js) supplies the composed track and [call media](../call-media.js) transfers source frames. [Captures](../captures.js) owns background captures.
 - [Browser tests](../test/browser.js) and the [display test](../test/display.js) verify what reaches the receiving end of the local call.
