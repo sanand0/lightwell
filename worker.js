@@ -1,7 +1,7 @@
 // @ts-check
-const main = ["scene.js", "html-sources.js", "effects.js", "compositor.js", "call-media.js", "call-main.js"];
 const prefix = "lightwell";
 import "./scene.js";
+const main = globalThis.Lightwell.callScripts;
 const mediaTypes = globalThis.Lightwell.mediaTypes;
 const ports = new Map();
 let creatingOffscreen;

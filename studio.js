@@ -53,6 +53,8 @@ function tell(message, error = false) {
   notice.dataset.error = String(error);
 }
 
+// A camera that starts clears its own earlier error, not unrelated notices.
+function clearError() { if (notice.dataset.error === "true") tell(""); }
 function option(value, label = value) {
   return new Option(label, value);
 }
@@ -895,7 +897,7 @@ async function startCamera(item) {
       }
       if (cameras.get(item.id) !== attempt) return;
       permission = "granted";
-      tell("");
+      clearError();
       void updateDevices();
       changed(true); syncCameraButton(item); syncReference(); status();
       return;
@@ -919,7 +921,7 @@ async function startCamera(item) {
       tell("Camera disconnected.", true);
     }, { once: true });
     void updateDevices();
-    tell("");
+    clearError();
   } catch (error) {
     track?.stop();
     if (cameras.get(item.id) !== attempt) return;
@@ -1153,6 +1155,26 @@ if (extension && !demo.has("fresh")) {
   live = (await chrome.storage.session.get("studioLive")).studioLive === true;
   $("#live-mode").setAttribute("aria-pressed", String(live));
 }
+// Chrome keeps registered call scripts in memory until they are registered again. Without this,
+// edited or added files reach Studio (read from disk) but not call tabs, which keep the old code.
+async function refreshCallScripts() {
+  const [main] = await chrome.scripting.getRegisteredContentScripts({ ids: ["lightwell-main"] });
+  if (!main) return;
+  const text = (await Promise.all(lab.callScripts.map(async file => {
+    const response = await fetch(file);
+    if (!response.ok) throw new Error(file + " " + response.status);
+    return response.text();
+  }))).join("\0");
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  const digest = btoa(String.fromCharCode(...new Uint8Array(hash)));
+  const { callScriptsDigest } = await extension.get("callScriptsDigest");
+  const listChanged = main.js.join() !== lab.callScripts.join();
+  if (!listChanged && digest === callScriptsDigest) return;
+  await chrome.scripting.updateContentScripts([{ id: main.id, js: lab.callScripts }]);
+  await extension.set({ callScriptsDigest: digest });
+  if (listChanged || callScriptsDigest) tell("Updated Lightwell for call tabs. Reload open call tabs to use it.");
+}
+if (extension) refreshCallScripts().catch(error => tell("Could not update call tabs. Reload Lightwell on the extensions page. " + error.message, true));
 void updateDevices();
 renderer.start();
 $("#live-mode").disabled = !extension;

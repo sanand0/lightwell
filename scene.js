@@ -3,6 +3,8 @@
 (() => {
   const W = 1280;
   const H = 720;
+  // Classic scripts injected into call tabs, in load order. Studio and the worker share this list.
+  const callScripts = ["scene.js", "html-sources.js", "effects.js", "compositor.js", "call-media.js", "call-main.js"];
   const types = ["camera", "media", "html", "markdown", "display", "ink"];
   const legacy = ["solid", "gradient", "generated", "text", "image", "video"];
   const mediaTypes = ["media", "image", "video"];
@@ -282,5 +284,5 @@
   }
 
   globalThis.Lightwell ??= {};
-  Object.assign(globalThis.Lightwell, { W, H, types, mediaTypes, fonts, cropEdges, cropRect, videoURL, fits, clips, blends, effects, fxKinds, cameraFrames, transform, layer, normalize, ordered, toWorld, toLocal, resize, snapTargets, snapMove, snapResize, stagePoint, fitRect, defaultScene, preset, callScene });
+  Object.assign(globalThis.Lightwell, { W, H, callScripts, types, mediaTypes, fonts, cropEdges, cropRect, videoURL, fits, clips, blends, effects, fxKinds, cameraFrames, transform, layer, normalize, ordered, toWorld, toLocal, resize, snapTargets, snapMove, snapResize, stagePoint, fitRect, defaultScene, preset, callScene });
 })();

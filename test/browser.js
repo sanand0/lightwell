@@ -1,7 +1,7 @@
 // @ts-check
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
@@ -381,8 +381,21 @@ try {
   });
   verify("A finished experimental exit hides the HTML layer in the decoded call");
 
+  const primer = await context.newPage();
+  await primer.goto(fixtureURL + "/studio.html?fresh");
+  const digest = () => primer.evaluate(async () => (await chrome.storage.local.get("callScriptsDigest")).callScriptsDigest);
+  for (let attempt = 0; attempt < 40 && !await digest(); attempt++) await delay(100);
+  assert.ok(await digest());
+  await primer.close();
+  await appendFile(join(fixture, "effects.js"), "\nglobalThis.Lightwell.edited = true;\n");
   const callStudio = watch(await context.newPage());
   await callStudio.goto(fixtureURL + "/studio.html?fresh#Talking%20Head");
+  await callStudio.getByText("Updated Lightwell for call tabs. Reload open call tabs to use it.", { exact: true }).waitFor();
+  const refreshed = await context.newPage();
+  await refreshed.goto(mock);
+  assert.equal(await refreshed.evaluate(() => globalThis.Lightwell.edited), true);
+  await refreshed.close();
+  verify("Studio refreshes cached call scripts after their files change");
   const urlImage = await callStudio.evaluate(async () => {
     const canvas = new OffscreenCanvas(8, 8);
     const ctx = canvas.getContext("2d");
