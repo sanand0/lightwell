@@ -38,7 +38,7 @@ try {
     document.documentElement.style.background = "#e31881";
   }, fixtureTitle);
   const studio = await browser.context.newPage();
-  await studio.goto("chrome-extension://" + id + "/studio.html#Talking%20Head");
+  await studio.goto("chrome-extension://" + id + "/studio.html?synthetic#Talking%20Head");
   await studio.bringToFront();
   await studio.locator("#add-layer").click();
   await studio.getByRole("button", { name: "Display capture", exact: true }).click();

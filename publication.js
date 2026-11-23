@@ -25,11 +25,13 @@ async function storeWork(mode, work, name = "publications") {
 export const savedScenes = () => storeWork("readonly", store => store.getAll(), "scenes");
 export const saveSceneRecord = entry => storeWork("readwrite", store => store.put(entry), "scenes");
 
+// Studio's unsaved, unpublished local files live under this key so drafts survive reloads and restarts.
+export const draftAssets = "studio-draft";
 export const readAssets = id => storeWork("readonly", store => store.get(id));
 export const writeAssets = (id, files) => storeWork("readwrite", store => store.put(files, id));
 export const removeOldAssets = id => storeWork("readwrite", store => {
   const keys = store.getAllKeys();
-  keys.onsuccess = () => keys.result.filter(key => key !== id).forEach(key => store.delete(key));
+  keys.onsuccess = () => keys.result.filter(key => key !== id && key !== draftAssets).forEach(key => store.delete(key));
 });
 
 export function frameSampler() {

@@ -28,7 +28,7 @@ const origin = "http://localhost:" + server.address().port;
 const otherOrigin = "http://localhost:" + otherServer.address().port;
 const mock = origin + "/mock-call.html?csp";
 let imageServer;
-const stageURL = "/studio.html#Glass%20Dashboard";
+const stageURL = "/studio.html?synthetic#Glass%20Dashboard";
 const canRead = page => page.waitForFunction(() => document.querySelector("#frame-info").textContent.includes("fps"), null, { timeout: 8000 });
 const waitNative = page => page.waitForFunction(() => document.querySelector("#diagnostic-values").textContent.includes("native · 1 native layers"), null, { timeout: 8000 });
 const readCanvas = (page, x, y) => page.locator("#stage").evaluate((canvas, { x, y }) =>
@@ -206,8 +206,8 @@ try {
   await studio.locator("#comparison").waitFor();
   assert.notDeepEqual(await readCanvas(studio, 875, 490), await studio.locator("#reference").evaluate(c => [...c.getContext("2d").getImageData(170, 80, 1, 1).data]));
   await screenshot(studio, "compare.png");
+  // Choosing a webcam starts it.
   await studio.locator("#camera-device").selectOption("default");
-  await studio.getByRole("button", { name: "Start camera", exact: true }).click();
   await studio.waitForFunction(() => document.querySelector("#diagnostic-values").textContent.includes("MediaPipe CPU ·"), null, { timeout: 16000 });
   const segStatus = await studio.locator("#diagnostic-values").evaluate(list => [...list.children].find(node => node.textContent === "Segmentation").nextElementSibling.textContent);
   assert.match(segStatus, /MediaPipe CPU · [0-9]+ × [0-9]+ · [0-9.]+ ms/);
@@ -220,7 +220,7 @@ try {
   assert.equal(await studio.evaluate(async () => (await chrome.storage.local.get("callScene")).callScene.name), "Presenter");
 
   const fallback = watch(await context.newPage());
-  await fallback.goto(ext + "/studio.html?no-html&seg-fail#Glass%20Dashboard");
+  await fallback.goto(ext + "/studio.html?synthetic&no-html&seg-fail#Glass%20Dashboard");
   await canRead(fallback);
   await fallback.waitForFunction(() => document.querySelector("#diagnostic-values").textContent.includes("fallback · 0 native"));
   assert.deepEqual(await readCanvas(fallback, 830, 290), [38, 57, 85, 255]);
@@ -401,7 +401,7 @@ try {
   await primer.close();
   await appendFile(join(fixture, "effects.js"), "\nglobalThis.Lightwell.edited = true;\n");
   const callStudio = watch(await context.newPage());
-  await callStudio.goto(fixtureURL + "/studio.html?fresh#Talking%20Head");
+  await callStudio.goto(fixtureURL + "/studio.html?fresh&synthetic#Talking%20Head");
   await callStudio.getByText("Updated Lightwell for call tabs. Reload open call tabs to use it.", { exact: true }).waitFor();
   const refreshed = await context.newPage();
   await refreshed.goto(mock);
@@ -661,8 +661,10 @@ try {
     if (!await liveStudio.locator("#transform-panel").evaluate(details => details.open)) await liveStudio.locator("#transform-panel summary").click();
     await liveStudio.locator('[data-property="x"]').fill(String(x));
     await liveStudio.locator('[data-property="y"]').fill("100");
-    await liveStudio.locator("#camera-device").selectOption("default");
-    await liveStudio.getByRole("button", { name: "Start camera", exact: true }).click();
+    // "Default webcam" previews in Studio only; a specific webcam runs in the background and feeds calls.
+    const picker = liveStudio.locator("#camera-device");
+    await liveStudio.waitForFunction(() => document.querySelector("#camera-device").options.length > 2);
+    await picker.selectOption(await picker.locator("option").nth(2).getAttribute("value"));
     await liveStudio.getByRole("button", { name: "Stop camera", exact: true }).waitFor();
     await liveStudio.locator('[data-source-property="brightness"]').evaluate((input, value) => {
       input.value = value; input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -698,10 +700,35 @@ try {
   await resumed.close();
   verify("Independent Studio camera tracks, settings, live output, and stop controls");
 
+  const first = watch(await context.newPage());
+  await first.goto(fixtureURL + "/studio.html?fresh");
+  await first.getByRole("button", { name: "Stop camera", exact: true }).waitFor();
+  assert.equal(await first.locator("#camera-device").inputValue(), "default");
+  await first.waitForFunction(() => document.querySelector("#stage-state").textContent !== "Synthetic camera" && document.querySelector("#frame-info").textContent.includes("fps"));
+  assert.equal((await getCaptures(first)).length, 0);
+  await first.getByRole("button", { name: "New", exact: true }).click();
+  await first.locator("#add-layer").click();
+  await first.locator("#layer-types").getByRole("button", { name: "Media", exact: true }).click();
+  await first.locator("#source-fields input[type=file]").setInputFiles({ name: "draft-large.webm", mimeType: "video/webm", buffer: Buffer.concat([webm, padding]) });
+  await first.getByText("draft-large.webm", { exact: true }).waitFor();
+  await delay(600);
+  await first.goto(fixtureURL + "/studio.html");
+  await first.locator("#layers button[data-layer-role=select]").filter({ hasText: "Media" }).click();
+  await first.getByText("draft-large.webm", { exact: true }).waitFor();
+  assert.equal(await first.evaluate(async () => {
+    const db = await new Promise(resolve => { const r = indexedDB.open("lightwell-call-assets"); r.onsuccess = () => resolve(r.result); });
+    const files = await new Promise(resolve => { const r = db.transaction("publications").objectStore("publications").get("studio-draft"); r.onsuccess = () => resolve(r.result); });
+    return [...files.values()][0]?.name;
+  }), "draft-large.webm");
+  await first.getByRole("button", { name: "Use in calls", exact: true }).click();
+  await first.getByText("Scene published to enabled origins.", { exact: true }).waitFor();
+  await first.close();
+  verify("Default scene starts the real webcam as a Studio-only preview and unsaved large files survive a reload");
+
   verify("Open Studio, live typing and in-progress pen pixels, clear undo, stacking, scene save/load and paused Live");
 
   const effectsStudio = watch(await context.newPage());
-  await effectsStudio.goto(fixtureURL + "/studio.html?fresh#Talking%20Head");
+  await effectsStudio.goto(fixtureURL + "/studio.html?fresh&synthetic#Talking%20Head");
   await effectsStudio.locator("[data-source-property=effect]").selectOption("blur");
   await effectsStudio.getByRole("button", { name: "Use in calls", exact: true }).click();
   await effectsStudio.getByText("Scene published to enabled origins.", { exact: true }).waitFor();

@@ -1,5 +1,19 @@
 # Prompts
 
+## Use camera by default, 23 Nov 2026
+
+<!--
+cd ~/code/lightwell
+claude --model opus --effort medium
+-->
+
+When using the extension for the first time (or any other default scenario), the camera should be the only source, and should be turned on.
+I mean, when someone joins a meeting after installing the extension, they shouldn't see a difference in behavior.
+Only when they click on the "Open Studio" and change stuff should there be a difference.
+When they change the scenes, persist the settings, even if unsaved, so they can continue after a reload, rejoin, or restart.
+
+<!-- claude --resume db1b28d9-a083-4822-8f01-31eed20502ce -->
+
 ## HTML in Canvas, 21 Nov 2026
 
 <!--

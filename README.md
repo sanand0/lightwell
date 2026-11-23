@@ -21,13 +21,15 @@ Use Chrome or Microsoft Edge, version 157 or later. Lightwell is experimental. T
 
 1. Select the purple and green Lightwell icon in the browser toolbar.
 2. Select **Open Studio**.
-3. Look at the large preview. The person you see at first is a built-in sample. It lets you try Studio with your webcam off.
+3. Look at the large preview. Studio starts with your webcam as the only layer. Allow camera access if the browser asks. Until you change something, calls show your usual camera.
 4. To practise, select **Pen** and draw on the preview. Select **Undo** to remove the last stroke.
 5. Select **Save**, enter a name, then select **Save scene**. A *scene* is an arrangement of camera, images, text and drawings. To open a saved scene again, choose its name from the **Scene** list.
 
 ![Lightwell Studio showing a sample camera picture, the Pen and Undo buttons under the preview, and the Layers list on the right](docs/images/studio.png)
 
-To see your webcam in Studio, select **Camera** in **Layers**. In **Source**, choose **Default webcam**, then select **Start camera**. Allow camera access if the browser asks. You can also leave Studio on the sample and start your webcam from the call website.
+To change the camera, select **Camera** in **Layers** and choose a **Source**. **Default webcam** uses the same camera as the call website. A specific webcam keeps running in the background so calls can use it after Studio closes. To try Studio with your webcam off, choose **Synthetic camera** or select **Stop camera**.
+
+Studio keeps your draft as you edit, including local files, even if you have not saved it. Close or reload Studio, rejoin a call or restart the browser, and Studio opens where you left off. Camera layers that were on start again.
 
 ### Add or move something
 

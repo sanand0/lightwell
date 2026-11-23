@@ -12,14 +12,14 @@ LIGHTWELL_HEADED=1 xvfb-run -a npm run test:display
 
 The browser tests use fresh profiles and fake webcams. The headed display test captures a browser tab. Set `LIGHTWELL_ARTIFACTS=artifacts` when running the browser suite to save test screenshots and clips locally.
 
-Run `npm run dev` for the [development Studio](http://localhost:8765/studio.html?dev) and [local test call](http://localhost:8765/mock-call.html). In the development Studio, use `?no-html`, `?seg-fail` or `?delegate=gpu` before the preset hash to exercise renderer behaviour. Use **Load JSON** in Studio to try the [Glass Dashboard](../scenes/glass-dashboard.json) or [Portal](../scenes/portal.json) example.
+Run `npm run dev` for the [development Studio](http://localhost:8765/studio.html?dev) and [local test call](http://localhost:8765/mock-call.html). In the development Studio, use `?no-html`, `?seg-fail`, `?delegate=gpu` or `?synthetic` (default webcams become the synthetic camera) before the preset hash to exercise renderer behaviour. Use **Load JSON** in Studio to try the [Glass Dashboard](../scenes/glass-dashboard.json) or [Portal](../scenes/portal.json) example.
 
 ## How scenes and sources work
 
 - **Save** stores the layer settings and local files with the named scene. **Save JSON** exports the settings. When you use **Load JSON**, reattach any local files that the export could not embed.
 - Older image and video layers open as Media, and older text layers open as Markdown. Imported scenes can still use the earlier generated backgrounds and built-in HTML templates.
 - Media and HTML URLs need cross-origin access (CORS). HTML and SVG files use sanitised markup and a subset of inline styles. Use display capture for a running website. When native HTML drawing is unavailable, the preview shows a labelled placeholder.
-- Studio camera and display captures run in the extension's background page. To release a source, use its **Stop** control or **Stop captures**. Reloading the extension or exiting the browser also releases these sources.
+- A **Default webcam** layer is previewed in Studio only and uses the call's own camera in calls. Specific webcams and display captures run in the extension's background page. To release a source, use its **Stop** control or **Stop captures**. Reloading the extension or exiting the browser also releases these sources.
 - **OS blur** uses the webcam effect when the browser exposes it. The Camera inspector shows when Lightwell uses segmented blur instead. Person cutout and segmented blur use a local model. [Chrome background blur API](https://developer.chrome.com/blog/background-blur)
 
 ## Experimental effects

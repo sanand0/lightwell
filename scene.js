@@ -36,7 +36,7 @@
   const sourceDefaults = {
     solid: { color: "#121129" }, gradient: { color: "#13112b", color2: "#333c77" },
     generated: { style: "orbit" },
-    camera: { effect: "original", mirror: false, flip: false, brightness: 100, contrast: 100, saturation: 100, grayscale: 0, device: "synthetic", cameraOff: false },
+    camera: { effect: "original", mirror: false, flip: false, brightness: 100, contrast: 100, saturation: 100, grayscale: 0, device: "default", cameraOff: false },
     html: { template: "metric", title: "Signal strength", markup: "", active: false, frozen: false, crop: 0 },
     text: { text: "Your title", color: "#fff3dc", size: 42 },
     markdown: { text: "# Your title", color: "#fff3dc", size: 38, font: "serif" },
@@ -109,7 +109,7 @@
         return { style: oneOf(source.style, ["orbit", "chart"]) };
       case "camera":
         return {
-          effect: oneOf(source.effect, effects), device: str(source.device, "synthetic"), cameraOff: source.cameraOff === true, mirror: source.mirror === true, flip: source.flip === true,
+          effect: oneOf(source.effect, effects), device: str(source.device, "default"), cameraOff: source.cameraOff === true, mirror: source.mirror === true, flip: source.flip === true,
           brightness: n(source.brightness, 100, 0, 200), contrast: n(source.contrast, 100, 0, 200),
           saturation: n(source.saturation, 100, 0, 200), grayscale: n(source.grayscale, 0, 0, 100),
         };

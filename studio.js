@@ -2,7 +2,7 @@
 import { createSegmenter } from "./segmentation.js";
 import { createHands, fakeHands, loadModel, modelCached } from "./hands.js";
 import { CaptureClient } from "./capture-client.js";
-import { readAssets, writeAssets, removeOldAssets, savedScenes, saveSceneRecord } from "./publication.js";
+import { draftAssets, readAssets, writeAssets, removeOldAssets, savedScenes, saveSceneRecord } from "./publication.js";
 
 const lab = globalThis.Lightwell;
 const { W, H, types, mediaTypes, fonts, clips, blends, fits, effects, cameraFrames, transform, Compositor } = lab;
@@ -117,9 +117,19 @@ function status() {
   [...diagnostics.values()].forEach((node, index) => { if (node.textContent !== values[index]) node.textContent = values[index]; });
 }
 
+// Stays null until startup has restored the stored draft files, so an early autosave cannot erase them.
+let draftFiles = null;
+async function persistFiles() {
+  if (draftFiles === null) return;
+  const signature = [...sessionFiles].map(([id, file]) => [id, file.name, file.size, file.lastModified].join(":")).join("|");
+  if (signature === draftFiles) return;
+  await writeAssets(draftAssets, new Map(sessionFiles));
+  draftFiles = signature;
+}
 function persist() {
   const value = lab.normalize(scene);
-  return extension ? extension.set({ studio: value, studioSceneId: libraryId }) : Promise.resolve().then(() => localStorage.setItem("studio", JSON.stringify(value)));
+  if (!extension) return Promise.resolve().then(() => localStorage.setItem("studio", JSON.stringify(value)));
+  return Promise.all([extension.set({ studio: value, studioSceneId: libraryId }), persistFiles()]);
 }
 function changed(sources = false) {
   renderer.setScene(scene);
@@ -543,7 +553,7 @@ async function shareDisplay(item) {
       else changed(true);
       return;
     }
-    if (extension) throw new Error("Background capture is unavailable. Reopen Studio and try again.");
+    if (extension && device !== "default") throw new Error("Background capture is unavailable. Reopen Studio and try again.");
     if (!navigator.mediaDevices?.getDisplayMedia) throw new Error("Display capture is unavailable.");
     const controller = globalThis.CaptureController?.prototype.setFocusBehavior ? new CaptureController() : null;
     controller?.setFocusBehavior("no-focus-change");
@@ -562,8 +572,11 @@ function select(item) {
   outline();
   if (reference) syncReference();
 }
+// ?synthetic swaps default webcams for the synthetic camera so development checks stay deterministic.
+const devCamera = item => { if (demo.has("synthetic") && item.type === "camera" && item.source.device === "default") item.source.device = "synthetic"; };
 function replaceScene(value, id = "", files = null) {
   const next = lab.normalize(value);
+  next.layers.forEach(devCamera);
   for (const item of scene.layers) {
     if (sessionFiles.has(item.id)) renderer.setFile(item, null);
     if (item.type === "display") renderer.setDisplay(item, null);
@@ -589,6 +602,7 @@ function replaceScene(value, id = "", files = null) {
   changed(true);
   select(scene.layers.find(item => item.type === "camera") || scene.layers.at(-1));
   refreshLibrary();
+  for (const item of scene.layers) if (item.type === "camera") void wakeCamera(item);
 }
 function refreshLibrary() {
   presetSelect.replaceChildren(option("", libraryId ? "Choose a saved scene" : scene.name), ...library.map(entry => option(entry.id, entry.scene.name)));
@@ -640,10 +654,12 @@ function add(type) {
   let name = label;
   for (let index = 2; scene.layers.some(item => item.name === name); index++) name = label + " " + index;
   const item = lab.layer(type, { name, ...framing[type], ...(type === "html" && { source: { template: "custom", title: "HTML / SVG" } }) });
+  devCamera(item);
   scene.layers.push(item);
   if (item.type === "camera") initCamera(item);
   changed();
   select(item);
+  if (item.type === "camera") void wakeCamera(item);
   return item;
 }
 for (const type of types) {
@@ -666,6 +682,7 @@ function duplicateLayer(item) {
   if (file) { sessionFiles.set(copy.id, file); renderer.setFile(copy, file); }
   if (copy.type === "camera") initCamera(copy);
   changed(mediaTypes.includes(copy.type)); select(copy);
+  if (copy.type === "camera") void wakeCamera(copy);
 }
 function removeLayer(item) {
   const index = scene.layers.indexOf(item);
@@ -874,7 +891,7 @@ function addCameraControls(item) {
   const wrap = make("label", "Camera source");
   const picker = make("select");
   picker.id = "camera-device";
-  const list = [["synthetic", "Synthetic camera"], ["default", "Default webcam"], ...devices];
+  const list = [["synthetic", "Synthetic camera"], ["default", "Default webcam · same as the call"], ...devices];
   if (!list.some(([id]) => id === item.source.device)) list.push([item.source.device, "Previously selected webcam"]);
   picker.append(...list.map(([id, name]) => option(id, name)));
   picker.value = item.source.device;
@@ -884,6 +901,7 @@ function addCameraControls(item) {
     item.source.cameraOff = false;
     initCamera(item);
     changed(true); syncReference(); syncCameraButton(item); status();
+    void wakeCamera(item);
   });
   const toggle = make("button");
   toggle.type = "button";
@@ -927,6 +945,13 @@ async function updateDevices() {
     }
   } catch (error) { renderer.report(error.message); }
 }
+// Camera layers that were left on resume when a scene opens, so the default scene shows the real webcam.
+async function wakeCamera(item) {
+  const idle = () => scene.layers.includes(item) && !item.source.cameraOff && item.source.device !== "synthetic" && cameras.get(item.id)?.state === "off";
+  if (!idle()) return;
+  const consent = await navigator.permissions?.query({ name: "camera" }).catch(() => null);
+  if (consent?.state !== "denied" && idle()) await startCamera(item);
+}
 async function startCamera(item) {
   item.source.cameraOff = false;
   initCamera(item);
@@ -943,7 +968,9 @@ async function startCamera(item) {
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("Camera capture requires a secure browser context.");
     const constraints = { video: { width: { ideal: W }, height: { ideal: H }, ...(device !== "default" && { deviceId: { exact: device } }) }, audio: false };
-    if (capture) {
+    // Calls use their own camera for "default" layers, so Studio previews it locally and releases it on close.
+    // Specific webcams run in the background page so calls can keep using them after Studio closes.
+    if (capture && device !== "default") {
       const options = { id: item.id, kind: "camera", device, delegate: demo.get("delegate") === "gpu" ? "GPU" : "CPU" };
       try { await capture.command("start", options); }
       catch (error) {
@@ -962,7 +989,7 @@ async function startCamera(item) {
       changed(true); syncCameraButton(item); syncReference(); status();
       return;
     }
-    if (extension) throw new Error("Background capture is unavailable. Reopen Studio and try again.");
+    if (extension && device !== "default") throw new Error("Background capture is unavailable. Reopen Studio and try again.");
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     track = stream.getVideoTracks()[0];
     if (cameras.get(item.id) !== attempt) { track.stop(); return; }
@@ -1199,18 +1226,25 @@ try {
   const current = draft ? library.find(entry => entry.id === savedId) : link;
   replaceScene(draft || current?.scene || scene, current?.id, current?.files);
   if (restore && previous && extension) {
+    const drafts = await readAssets(draftAssets).catch(() => null);
     const { callScene, callMedia } = await extension.get(["callScene", "callMedia"]);
     const files = callMedia?.assets?.length ? await readAssets(callMedia.id) : null;
     const priorLayers = files && callScene ? lab.normalize(callScene).layers : [];
     for (const item of scene.layers) {
-      const file = files?.get(item.id);
+      if (item.source.url || sessionFiles.has(item.id)) continue;
+      const stored = drafts?.get(item.id);
+      const published = files?.get(item.id);
       const prior = priorLayers.find(layer => layer.id === item.id && layer.type === item.type);
-      if (!(file instanceof Blob) || item.source.url || sessionFiles.has(item.id) || prior?.source.filename !== item.source.filename) continue;
+      const file = stored instanceof Blob && stored.name === item.source.filename ? stored
+        : published instanceof Blob && prior?.source.filename === item.source.filename ? published : null;
+      if (!file) continue;
       sessionFiles.set(item.id, file);
       renderer.setFile(item, file);
     }
   }
 } catch (error) { replaceScene(scene); tell("Saved scene could not be loaded. " + error.message, true); }
+draftFiles = "\0";
+if (extension) void persistFiles().catch(error => console.warn("Lightwell draft files:", error));
 if (extension && !demo.has("fresh")) {
   live = (await chrome.storage.session.get("studioLive")).studioLive === true;
   $("#live-mode").setAttribute("aria-pressed", String(live));
