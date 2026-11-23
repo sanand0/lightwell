@@ -79,6 +79,8 @@
       if (!this.layers.has(item.id)) this.layers.set(item.id, {});
       const slot = this.layers.get(item.id);
       if (!slot.loaded) this.request(slot, kind, item.id);
+      // A camera whose background capture is missing or not yet streaming falls back to the call's own camera, never a blank layer.
+      if (item.type === "camera" && (slot.error || !slot.frame)) return undefined;
       return slot.frame ?? null;
     }
 
@@ -89,6 +91,7 @@
       for (const item of active) {
         if (!this.publication?.assets?.includes(item.id) && !this.publication?.display?.includes(item.id)) continue;
         const slot = this.layers.get(item.id);
+        if (slot?.error && item.type === "camera") return item.name + " · using this call's camera (" + slot.error + ")";
         if (slot?.error) return item.name + " · " + slot.error;
         if (!slot?.frame) return item.name + " · " + (isMovie(item) ? "waiting for video" : "loading image");
       }

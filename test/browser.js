@@ -393,6 +393,31 @@ try {
   });
   verify("Camera fill paints the call's own camera inside an HTML layer in the decoded call");
 
+  // A publication from before default webcams stayed local lists the camera as a background capture that no longer exists.
+  delete liveUpdate.layers[1].fx;
+  liveUpdate.layers[2].id = "stale-camera";
+  liveUpdate.layers[0].source.color = "#227733";
+  await worker.evaluate(([callScene, callMedia]) => chrome.storage.local.set({ callScene, callMedia }),
+    [liveUpdate, { id: crypto.randomUUID(), assets: [], display: ["stale-camera"] }]);
+  const callPixel = (x, y) => caller.evaluate(([x, y]) => {
+    const video = document.querySelector("#remote-view");
+    const ctx = new OffscreenCanvas(1, 1).getContext("2d");
+    ctx.drawImage(video, x, y, 1, 1, 0, 0, 1, 1);
+    return [...ctx.getImageData(0, 0, 1, 1).data];
+  }, [x, y]);
+  // The green background confirms the stale publication reached the call before the camera area is judged.
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const [r, g] = await callPixel(5, 5);
+    if (g > 90 && r < 70) break;
+    await delay(100);
+  }
+  await delay(600);
+  const staleCamera = await callPixel(287, 150);
+  const [sr, sg, sb] = staleCamera;
+  assert.ok(Math.abs(sr - sg) < 30 && Math.abs(sg - sb) < 30 && sr > 40, "stale camera area should show the call's camera, got " + staleCamera);
+  await worker.evaluate(() => chrome.storage.local.remove("callMedia"));
+  verify("A camera published as a missing background capture falls back to the call's own camera");
+
   const primer = await context.newPage();
   await primer.goto(fixtureURL + "/studio.html?fresh");
   const digest = () => primer.evaluate(async () => (await chrome.storage.local.get("callScriptsDigest")).callScriptsDigest);

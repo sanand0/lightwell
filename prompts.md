@@ -1,5 +1,14 @@
 # Prompts
 
+## Fix camera, 23 Nov 2026
+
+<!--
+cd ~/code/lightwell
+claude --model opus --effort medium
+-->
+
+Session db1b28d9-a083-4822-8f01-31eed20502ce made some fixes and now, when I open Google Meet, it says "Camera might be blocked". I can see the camera in the studio but on Google Meet it's just a blank solid color.
+
 ## Use camera by default, 23 Nov 2026
 
 <!--
